@@ -2,7 +2,7 @@
 //--------------------------------------------------------------------------------------------------------
 // Module  : tb_jls_encoder
 // Type    : simulation, top
-// Standard: SystemVerilog 2005 (IEEE1800-2005)
+// Standard: Verilog 2001 (IEEE1364-2001)
 // Function: testbench for jls_encoder,
 //           load some .pgm files (uncompressed image file), and push them to jls_encoder.
 //           get output JPEG-LS stream from jls_encoder, and write them to .jls files (JPEG-LS image file)
