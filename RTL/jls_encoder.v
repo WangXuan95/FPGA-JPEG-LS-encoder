@@ -2,12 +2,12 @@
 //--------------------------------------------------------------------------------------------------------
 // Module  : jls_encoder
 // Type    : synthesizable, IP's top
-// Standard: SystemVerilog 2005 (IEEE1800-2005)
+// Standard: Verilog 2001 (IEEE1364-2001)
 // Function: JPEG-LS image compressor
 //--------------------------------------------------------------------------------------------------------
 
 module jls_encoder #(
-    parameter [2:0] NEAR = 3'd1
+    parameter   [ 2:0] NEAR = 3'd0
 ) (
     input  wire        rstn,
     input  wire        clk,
@@ -21,10 +21,12 @@ module jls_encoder #(
     output wire        o_last   // indicate the last output data of a image
 );
 
+
+
 //---------------------------------------------------------------------------------------------------------------------------
 // local parameters
 //---------------------------------------------------------------------------------------------------------------------------
-wire [3:0] P_QBPPS [8];
+wire [3:0] P_QBPPS [0:7];
 assign P_QBPPS[0] = 4'd8;
 assign P_QBPPS[1] = 4'd7;
 assign P_QBPPS[2] = 4'd6;
@@ -34,19 +36,19 @@ assign P_QBPPS[5] = 4'd5;
 assign P_QBPPS[6] = 4'd5;
 assign P_QBPPS[7] = 4'd5;
 
-localparam logic               P_LOSSY     = NEAR != '0;
-localparam logic  signed [8:0] P_NEAR      = $signed({6'd0, NEAR});
-localparam logic  signed [8:0] P_T1        = $signed(9'd3) + $signed(9'd3) * P_NEAR;
-localparam logic  signed [8:0] P_T2        = $signed(9'd7) + $signed(9'd5) * P_NEAR;
-localparam logic  signed [8:0] P_T3        = $signed(9'd21)+ $signed(9'd7) * P_NEAR;
-localparam logic  signed [9:0] P_QUANT     = {P_NEAR, 1'b1};
-localparam logic  signed [9:0] P_QBETA     = $signed(10'd256 + {5'd0,NEAR,2'd0}) / P_QUANT;
-localparam logic  signed [9:0] P_QBETAHALF = (P_QBETA+$signed(10'd1)) / $signed(10'd2);
-wire        [3:0] P_QBPP      = P_QBPPS[NEAR];
-wire        [4:0] P_LIMIT     = 5'd31 - {1'b0, P_QBPP};
-localparam logic        [12:0] P_AINIT     = (NEAR=='0) ? 13'd4 : 13'd2;
+localparam                     P_LOSSY     = (NEAR != 3'd0);
+localparam        signed [8:0] P_NEAR      = $signed({6'd0, NEAR});
+localparam        signed [8:0] P_T1        = $signed(9'd3) + $signed(9'd3) * P_NEAR;
+localparam        signed [8:0] P_T2        = $signed(9'd7) + $signed(9'd5) * P_NEAR;
+localparam        signed [8:0] P_T3        = $signed(9'd21)+ $signed(9'd7) * P_NEAR;
+localparam        signed [9:0] P_QUANT     = {P_NEAR, 1'b1};
+localparam        signed [9:0] P_QBETA     = $signed(10'd256 + {5'd0,NEAR,2'd0}) / P_QUANT;
+localparam        signed [9:0] P_QBETAHALF = (P_QBETA+$signed(10'd1)) / $signed(10'd2);
+wire                     [3:0] P_QBPP      = P_QBPPS[NEAR];
+wire                     [4:0] P_LIMIT     = 5'd31 - {1'b0, P_QBPP};
+localparam              [12:0] P_AINIT     = (NEAR == 3'd0) ? 13'd4 : 13'd2;
 
-wire [3:0] J [32];
+wire [3:0] J [0:31];
 assign J[ 0] = 4'd0;
 assign J[ 1] = 4'd0;
 assign J[ 2] = 4'd0;
@@ -85,188 +87,232 @@ assign J[31] = 4'd15;
 //---------------------------------------------------------------------------------------------------------------------------
 // function: is_near
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic func_is_near(input [7:0] x1, input [7:0] x2);
-    logic signed [8:0] ex1, ex2;
+function       [0:0] func_is_near;
+    input      [7:0] x1, x2;
+    reg signed [8:0] ex1, ex2;
+begin
     ex1 = $signed({1'b0,x1});
     ex2 = $signed({1'b0,x2});
-    return ex1 - ex2 <= P_NEAR && ex2 - ex1 <= P_NEAR;
+    func_is_near = ((ex1 - ex2 <= P_NEAR) && (ex2 - ex1 <= P_NEAR));
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: predictor (get_px)
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [7:0] func_predictor(input [7:0] a, input [7:0] b, input [7:0] c);
+function  [7:0] func_predictor;
+    input [7:0] a, b, c;
+begin
     if( c>=a && c>=b )
-        return a>b ? b : a;
+        func_predictor = (a>b) ? b : a;
     else if( c<=a && c<=b )
-        return a>b ? a : b;
+        func_predictor = (a>b) ? a : b;
     else
-        return a - c + b;
+        func_predictor = a - c + b;
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: q_quantize
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic signed [3:0] func_q_quantize(input [7:0] x1, input [7:0] x2);
-    logic signed [8:0] delta;
+function signed [3:0] func_q_quantize;
+    input       [7:0] x1, x2;
+    reg signed  [8:0] delta;
+begin
     delta = $signed({1'b0,x1}) - $signed({1'b0,x2});
     if     (delta <= -P_T3 )
-        return -$signed(4'd4);
+        func_q_quantize = -$signed(4'd4);
     else if(delta <= -P_T2 )
-        return -$signed(4'd3);
+        func_q_quantize = -$signed(4'd3);
     else if(delta <= -P_T1 )
-        return -$signed(4'd2);
+        func_q_quantize = -$signed(4'd2);
     else if(delta <  -P_NEAR )
-        return -$signed(4'd1);
+        func_q_quantize = -$signed(4'd1);
     else if(delta <=  P_NEAR )
-        return  $signed(4'd0);
+        func_q_quantize =  $signed(4'd0);
     else if(delta <   P_T1 )
-        return  $signed(4'd1);
+        func_q_quantize =  $signed(4'd1);
     else if(delta <   P_T2 )
-        return  $signed(4'd2);
+        func_q_quantize =  $signed(4'd2);
     else if(delta <   P_T3 )
-        return  $signed(4'd3);
+        func_q_quantize =  $signed(4'd3);
     else
-        return  $signed(4'd4);
+        func_q_quantize =  $signed(4'd4);
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: get_q (part 1), qp1 = 81*Q(d-b) + 9*Q(b-c)
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic signed [9:0] func_get_qp1(input [7:0] c, input [7:0] b, input [7:0] d);
-    return $signed(10'd81) * func_q_quantize(d,b) + $signed(10'd9) * func_q_quantize(b,c);
+function signed [9:0] func_get_qp1;
+    input       [7:0] c, b, d;
+begin
+    func_get_qp1 = $signed(10'd81) * func_q_quantize(d,b) + $signed(10'd9) * func_q_quantize(b,c);
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: get_q (part 2), get sign(qs) and abs(qs), where qs = qp1 + Q(c-a)
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [9:0] func_get_q(input signed [9:0] qp1, input [7:0] c, input [7:0] a);
-    logic signed [9:0] qs;
-    logic              s;
-    logic        [8:0] q;
+function         [9:0] func_get_q;
+    input signed [9:0] qp1;
+    input        [7:0] c, a;
+    reg   signed [9:0] qs;
+    reg                s;
+    reg          [8:0] q;
+begin
     qs = qp1 + func_q_quantize(c,a);
     s = qs[9];
     q = s ? (~qs[8:0]+9'd1) : qs[8:0];
-    return {s, q};
+    func_get_q = {s, q};
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: clip
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [7:0] func_clip(input signed [9:0] val);
+function         [7:0] func_clip;
+    input signed [9:0] val;
+begin
     if( val > $signed(10'd255) )
-        return 8'd255;
+        func_clip = 8'd255;
     else if( val < $signed(10'd0) )
-        return 8'd0;
+        func_clip = 8'd0;
     else
-        return val[7:0];
+        func_clip = val[7:0];
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: errval_quantize
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic signed [9:0] func_errval_quantize(input signed [9:0] err);
+function  signed [9:0] func_errval_quantize;
+    input signed [9:0] err;
+begin
     if(err[9])
-        return -( (P_NEAR - err) / P_QUANT );
+        func_errval_quantize = -( (P_NEAR - err) / P_QUANT );
     else
-        return    (P_NEAR + err) / P_QUANT;
+        func_errval_quantize =    (P_NEAR + err) / P_QUANT;
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: modrange
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic signed [9:0] func_modrange(input signed [9:0] val);
-    logic signed [9:0] new_val;
-    new_val = val;
-    if( new_val[9] )
-        new_val += P_QBETA;
-    if( new_val >= P_QBETAHALF )
-        new_val -= P_QBETA;
-    return new_val;
+function  signed [9:0] func_modrange;
+    input signed [9:0] val;
+begin
+    func_modrange = val;
+    if( func_modrange[9] )
+        func_modrange = func_modrange + P_QBETA;
+    if( func_modrange >= P_QBETAHALF )
+        func_modrange = func_modrange - P_QBETA;
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: get k
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [3:0] func_get_k(input [12:0] A, input [6:0] N, input rt);
-    logic [18:0] Nt, At;
-    logic [ 3:0] k;
+function  [ 3:0] func_get_k;
+    input [12:0] A;
+    input [ 6:0] N;
+    input        rt;
+    reg   [18:0] Nt, At;
+    reg   [ 3:0] ii;
+begin
     Nt = {12'h0, N};
     At = { 6'h0, A};
-    k = 4'd0;
-    if(rt)
-        At += {13'd0, N[6:1]};
-    for(int ii=0; ii<13; ii++)
+    func_get_k = 4'd0;
+    if (rt)
+        At = At + {13'd0, N[6:1]};
+    for (ii=4'd0; ii<4'd13; ii=ii+4'd1)
         if((Nt<<ii) < At)
-            k++;
-    return k;
+            func_get_k = func_get_k + 4'd1;
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: B update for run mode
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [6:0] B_update(input reset, input [6:0] B, input errm0);
+function  [6:0] B_update;
+    input       reset;
+    input [6:0] B;
+    input       errm0;
+begin
     B_update = B;
-    if(errm0)
-        B_update ++;
-    if(reset)
-        B_update >>>= 1;
+    if (errm0)
+        B_update = B_update + 7'd1;
+    if (reset)
+        B_update = B_update >>> 1;
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: C, B update for regular mode
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [14:0] C_B_update(input reset, input [6:0] N, input signed [7:0] C, input signed [6:0] B, input signed [9:0] err);
-    logic signed [9:0] Bt;
-    logic signed [7:0] Ct;
+function        [14:0] C_B_update;
+    input              reset;
+    input        [6:0] N;
+    input signed [7:0] C;
+    input signed [6:0] B;
+    input signed [9:0] err;
+    reg   signed [9:0] Bt;
+    reg   signed [7:0] Ct;
+begin
     Bt = B;
     Ct = C;
-    Bt += err * P_QUANT;
+    Bt = Bt + (err * P_QUANT);
     if(reset)
-        Bt >>>= 1;
+        Bt = Bt >>> 1;
     if( Bt <= -$signed({3'd0,N}) ) begin
-        Bt += $signed({3'd0,N});
+        Bt = Bt + $signed({3'd0,N});
         if( Bt <= -$signed({3'd0,N}) )
             Bt = -$signed({3'd0,N}-10'd1);
         if( Ct != $signed(8'd128) )
-            Ct--;
+            Ct = Ct - 8'd1;
     end else if( Bt > $signed(10'd0) ) begin
-        Bt -= $signed({3'd0,N});
+        Bt = Bt - $signed({3'd0,N});
         if( Bt > $signed(10'd0) )
             Bt = $signed(10'd0);
         if( Ct != $signed(8'd127) )
-            Ct++;
+            Ct = Ct + 8'd1;
     end
-    return {Ct, Bt[6:0]};
+    C_B_update = {Ct, Bt[6:0]};
+end
 endfunction
 
 
 //---------------------------------------------------------------------------------------------------------------------------
 // function: A update
 //---------------------------------------------------------------------------------------------------------------------------
-function automatic logic [12:0] A_update(input reset, input [12:0] A, input [9:0] inc);
+function  [12:0] A_update;
+    input        reset;
+    input [12:0] A;
+    input [ 9:0] inc;
+begin
     A_update = A + {3'd0, inc};
     if(reset)
-        A_update >>>= 1;
+        A_update = A_update >>> 1;
+end
 endfunction
 
 
 //-------------------------------------------------------------------------------------------------------------------
 // context memorys
 //-------------------------------------------------------------------------------------------------------------------
-reg        [ 5:0] Nram [366];
-reg        [12:0] Aram [366];
-reg signed [ 6:0] Bram [366];
+reg        [ 5:0] Nram [0:365];
+reg        [12:0] Aram [0:365];
+reg signed [ 6:0] Bram [0:365];
 reg signed [ 7:0] Cram [1:364];
 
 
@@ -285,7 +331,7 @@ reg [14:0] a_jj;
 
 always @ (posedge clk)
     if(~rstn) begin
-        {a_sof, a_e, a_x, a_w, a_h, a_wl, a_hl, a_ii, a_jj} <= '0;
+        {a_sof, a_e, a_x, a_w, a_h, a_wl, a_hl, a_ii, a_jj} <= 0;
     end else begin
         a_sof <= i_sof;
         a_e <= i_e;
@@ -295,13 +341,13 @@ always @ (posedge clk)
         if(a_sof) begin
             a_wl <= (a_w<14'd4 ? 14'd4 : a_w);
             a_hl <= a_h;
-            a_ii <= '0;
-            a_jj <= '0;
+            a_ii <= 14'd0;
+            a_jj <= 15'd0;
         end else if(a_e) begin
             if(a_ii < a_wl)
                 a_ii <= a_ii + 14'd1;
             else begin
-                a_ii <= '0;
+                a_ii <= 14'd0;
                 if(a_jj <= {1'b0,a_hl})
                     a_jj <= a_jj + 15'd1;
             end
@@ -324,12 +370,12 @@ reg [ 7:0] b_x;
 always @ (posedge clk) begin
     b_sof <= a_sof & rstn;
     if(~rstn | a_sof) begin
-        {b_e, b_fc, b_lc, b_fr, b_eof, b_ii, b_x} <= '0;
+        {b_e, b_fc, b_lc, b_fr, b_eof, b_ii, b_x} <= 0;
     end else begin
         b_e <= a_e & (a_jj <= {1'b0,a_hl});
-        b_fc <= a_e & (a_ii == '0);
+        b_fc <= a_e & (a_ii == 14'd0);
         b_lc <= a_e & (a_ii == a_wl);
-        b_fr <= a_e & (a_jj == '0);
+        b_fr <= a_e & (a_jj == 15'd0);
         b_eof <= a_jj > {1'b0,a_hl};
         b_ii <= a_ii;
         b_x <= a_x;
@@ -356,7 +402,7 @@ reg [ 7:0] c_d;
 always @ (posedge clk) begin
     c_sof <= b_sof & rstn;
     if(~rstn | b_sof) begin
-        {c_e,c_fc,c_lc,c_fr,c_eof,c_ii,c_x,c_b,c_bt,c_c} <= '0;
+        {c_e,c_fc,c_lc,c_fr,c_eof,c_ii,c_x,c_b,c_bt,c_c} <= 0;
     end else begin
         c_e <= b_e;
         c_fc <= b_fc;
@@ -366,10 +412,10 @@ always @ (posedge clk) begin
         c_ii <= b_ii;
         if(b_e) begin
             c_x <= b_x;
-            c_b <= b_fr ? '0 : c_d;
+            c_b <= b_fr ? 8'd0 : c_d;
             if(b_fr) begin
-                c_bt <= '0;
-                c_c <= '0;
+                c_bt <= 8'd0;
+                c_c <= 8'd0;
             end else if(b_fc) begin
                 c_bt <= c_d;
                 c_c <= c_bt;
@@ -394,12 +440,13 @@ reg [ 7:0] d_b;
 reg [ 7:0] d_c;
 reg signed [9:0] d_qp1;
 
+wire [7:0] c_w_d = c_fr ? 8'd0 : (c_lc ? c_b : c_d);
+
 always @ (posedge clk) begin
     d_sof <= c_sof & rstn;
     if(~rstn | c_sof) begin
-        {d_e, d_fc, d_lc, d_eof, d_ii, d_x, d_b, d_c, d_qp1} <= '0;
+        {d_e, d_fc, d_lc, d_eof, d_ii, d_x, d_b, d_c, d_qp1} <= 0;
     end else begin
-        logic [7:0] d;
         d_e <= c_e;
         d_fc <= c_fc;
         d_lc <= c_lc;
@@ -408,8 +455,7 @@ always @ (posedge clk) begin
         d_x <= c_x;
         d_b <= c_b;
         d_c <= c_c;
-        d = c_fr ? '0 : (c_lc ? c_b : c_d);
-        d_qp1 <= func_get_qp1(c_c, c_b, d);
+        d_qp1 <= func_get_qp1(c_c, c_b, c_w_d);
     end
 end
 
@@ -436,48 +482,49 @@ reg        [5:0] e_Nn;
 reg signed [7:0] e_Cn;
 reg signed [6:0] e_Bn;
 
+wire       [7:0] d_w_a = d_fc ? d_b : e_x;
+
+reg              s;           // not real register
+reg        [8:0] q;           // not real register
+reg              rt;          // not real register
+reg              runi;        // not real register
+reg              rune;        // not real register
+reg signed [7:0] Co;          // not real register
+reg        [6:0] No, Nn;      // not real register
+reg signed [6:0] Bo;          // not real register
+reg signed [9:0] px;          // not real register
+reg signed [9:0] err;         // not real register
+
 always @ (posedge clk) begin
     e_sof <= d_sof & rstn;
     e_2BleN <= 1'b0;
-    {e_write_C, e_Cn, e_write_en, e_Bn, e_Nn} <= '0;
+    {e_write_C, e_Cn, e_write_en, e_Bn, e_Nn} <= 0;
     if(~rstn | d_sof) begin
-        {e_e, e_fc, e_lc, e_eof, e_ii, e_runi, e_rune, e_x, e_q, e_rt, e_err, e_No} <= '0;
+        {e_e, e_fc, e_lc, e_eof, e_ii, e_runi, e_rune, e_x, e_q, e_rt, e_err, e_No} <= 0;
     end else begin
-        logic        [7:0] a;
-        logic              s;
-        logic        [8:0] q;
-        logic              rt;
-        logic              runi;
-        logic              rune;
-        logic signed [7:0] Co;
-        logic        [6:0] No, Nn;
-        logic signed [6:0] Bo;
-        logic signed [9:0] px;
-        logic signed [9:0] err;
-        a = d_fc ? d_b : e_x;
         rt = 1'b0;
         rune = 1'b0;
-        No = '0;
-        err = '0;
-        {s, q} = func_get_q(d_qp1, d_c, a);
+        No = 0;
+        err = 0;
+        {s, q} = func_get_q(d_qp1, d_c, d_w_a);
         Co = (e_write_C & e_q==q) ? e_Cn : Cram[q];
         runi = ~d_fc & e_runi | (q == 9'd0);
         if(runi) begin
-            runi = func_is_near(d_x, a);
+            runi = func_is_near(d_x, d_w_a);
             rune = ~runi;
         end
         if(d_e) begin
             if(runi) begin
-                e_x <= P_LOSSY ? a : d_x;
+                e_x <= P_LOSSY ? d_w_a : d_x;
             end else begin
                 if(rune) begin
-                    rt = func_is_near(d_b, a);
-                    s = {1'b0,a} > ({1'b0,d_b} + {6'd0,NEAR}) ? 1'b1 : 1'b0;
+                    rt = func_is_near(d_b, d_w_a);
+                    s = {1'b0,d_w_a} > ({1'b0,d_b} + {6'd0,NEAR}) ? 1'b1 : 1'b0;
                     q = rt ? 9'd365 : 9'd0;
-                    px = rt ? a : d_b;
+                    px = rt ? d_w_a : d_b;
                 end else begin
                     px[9:8] = 2'b00;
-                    px[7:0] = func_clip( $signed({2'h0, func_predictor(a,d_b,d_c)}) + ( s ? -$signed({Co[7],Co[7],Co}) : $signed({Co[7],Co[7],Co}) ) );
+                    px[7:0] = func_clip( $signed({2'h0, func_predictor(d_w_a, d_b, d_c)}) + ( s ? -$signed({Co[7],Co[7],Co}) : $signed({Co[7],Co[7],Co}) ) );
                 end
                 err = s ? px - $signed({2'd0, d_x}) : $signed({2'd0, d_x}) - px;
                 err = func_errval_quantize(err);
@@ -485,7 +532,7 @@ always @ (posedge clk) begin
                 err = func_modrange(err);
                 No = ((e_write_en & e_q==q) ? e_Nn : Nram[q]) + 7'd1;
                 Nn = No;
-                if(No[6]) Nn >>>= 1;
+                if(No[6]) Nn = Nn >>> 1;
                 e_Nn <= Nn[5:0];
                 Bo = (e_write_en & e_q==q) ? e_Bn : Bram[q];
                 e_write_en <= 1'b1;
@@ -518,6 +565,7 @@ end
 // pipeline stage f: write Cram, Bram, Nram
 //-------------------------------------------------------------------------------------------------------------------
 reg [8:0] NBC_init_addr;
+
 always @ (posedge clk)
     NBC_init_addr <= e_sof ? NBC_init_addr + (NBC_init_addr < 9'd366 ? 9'd1 : 9'd0) : 9'd0;
 
@@ -556,7 +604,7 @@ reg              ef_write_en;
 always @ (posedge clk) begin
     ef_sof <= e_sof & rstn;
     if(~rstn | e_sof) begin
-        {ef_e, ef_fc, ef_lc, ef_eof, ef_runi, ef_rune, ef_2BleN, ef_q, ef_rt, ef_err, ef_No, ef_write_en} <= '0;
+        {ef_e, ef_fc, ef_lc, ef_eof, ef_runi, ef_rune, ef_2BleN, ef_q, ef_rt, ef_err, ef_No, ef_write_en} <= 0;
     end else begin
         ef_e <= e_e;
         ef_fc <= e_fc;
@@ -603,50 +651,50 @@ reg        g_write_en;
 reg [12:0] g_An;
 always @ (posedge clk)
     if(~rstn | f_sof)
-        {g_q, g_write_en, g_An} <= '0;
+        {g_q, g_write_en, g_An} <= 0;
     else
         {g_q, g_write_en, g_An} <= {f_q, f_write_en, f_An};
 
+reg [ 1:0] on;         // not real register
+reg [15:0] rc;         // not real register
+reg [ 4:0] ri;         // not real register
+reg [12:0] Ao;         // not real register
+reg [ 3:0] k;          // not real register
+reg [ 9:0] abserr;     // not real register
+reg [ 9:0] merr, Ainc; // not real register
+reg        map;        // not real register
 
 always @ (posedge clk) begin
     f_sof <= ef_sof & rstn;
     f_limit <= P_LIMIT;
     f_An <= P_AINIT;
     if(~rstn | ef_sof) begin
-        {f_e, f_eof, f_runi, f_rune, f_merr, f_k, f_rc, f_ri, f_on, f_cb, f_cn, f_q, f_write_en} <= '0;
+        {f_e, f_eof, f_runi, f_rune, f_merr, f_k, f_rc, f_ri, f_on, f_cb, f_cn, f_q, f_write_en} <= 0;
     end else begin
-        logic [ 1:0] on;
-        logic [15:0] rc;
-        logic [ 4:0] ri;
-        logic [12:0] Ao;
-        logic [ 3:0] k;
-        logic [ 9:0] abserr;
-        logic [ 9:0] merr, Ainc;
-        logic        map;
-        on = '0;
-        rc = (ef_fc|~ef_runi) ? '0 : f_rc;
+        on = 2'd0;
+        rc = (ef_fc|~ef_runi) ? 16'd0 : f_rc;
         ri = f_ri;
         Ao = (f_write_en & f_q==ef_q) ? f_An : (g_write_en & g_q==ef_q) ? g_An : ef_Ao;
         abserr = ef_err<$signed(10'd0) ? $unsigned(-ef_err) : $unsigned(ef_err);
-        merr='0;
-        Ainc='0;
+        merr = 10'd0;
+        Ainc = 10'd0;
         f_write_en <= ef_write_en;
         k = func_get_k(Ao, ef_No, ef_rt);
-        f_cb <= ef_fc ? '0 : f_rc;
+        f_cb <= ef_fc ? 16'd0 : f_rc;
         f_cn <= {1'b0,J[ri]} + 5'd1;
         if(ef_runi) begin
-            rc ++;
+            rc = rc + 16'd1;
             if(rc >= (16'd1<<J[ri])) begin
-                on++;
-                rc -= (16'd1<<J[ri]);
-                if(ri < 5'd31) ri ++;
+                on = on + 2'd1;
+                rc = rc - (16'd1<<J[ri]);
+                if(ri < 5'd31) ri = ri + 5'd1;
             end
             if(ef_lc & (rc > 16'd0))
-                on++;
+                on = on + 2'd1;
         end else if(ef_rune) begin
             f_limit <= P_LIMIT - 5'd1 - {1'b0,J[ri]};
-            if(ri > '0) ri --;
-            map = ~( (ef_err=='0) | ( (ef_err>$signed(10'd0)) ^ (k==4'd0 & ef_2BleN) ) );
+            if (ri > 5'd0) ri = ri - 5'd1;
+            map = ~( (ef_err==10'd0) | ( (ef_err>$signed(10'd0)) ^ (k==4'd0 & ef_2BleN) ) );
             merr = (abserr<<1) - {9'd0,ef_rt} - {9'd0,map};
             Ainc = ((merr + {9'd0,~ef_rt}) >> 1);
         end else begin
@@ -700,21 +748,21 @@ reg  [ 4:0] g_zn;   // in range of 0~27
 reg  [ 9:0] g_db;
 reg  [ 3:0] g_dn;   // in range of 0~13
 
+wire [ 9:0] f_w_merr_sk = (f_merr >> f_k);
+
 always @ (posedge clk) begin
     g_sof <= f_sof & rstn;
     if(~rstn | f_sof) begin
-        {g_e, g_eof, g_runi, g_on, g_cb, g_cn, g_zn, g_db, g_dn} <= '0;
+        {g_e, g_eof, g_runi, g_on, g_cb, g_cn, g_zn, g_db, g_dn} <= 0;
     end else begin
-        logic [9:0] merr_sk;
-        merr_sk = f_merr >> f_k;
         g_e <= f_e;
         g_eof <= f_eof;
         g_runi <= f_runi;
         g_on <= f_on;
-        g_cb <= f_rune ? f_cb : '0;
-        g_cn <= f_rune ? f_cn : '0;
-        if(merr_sk < f_limit) begin 
-            g_zn <= merr_sk[4:0];
+        g_cb <= f_rune ? f_cb : 16'd0;
+        g_cn <= f_rune ? f_cn : 5'd0;
+        if(f_w_merr_sk < f_limit) begin 
+            g_zn <= f_w_merr_sk[4:0];
             g_db <= f_merr & ~(10'h3ff<<f_k);
             g_dn <= f_k;
         end else begin
@@ -736,7 +784,8 @@ reg [ 5:0] h_bn;  // in range of 0~57
 
 always @ (posedge clk) begin
     h_sof <= g_sof & rstn;
-    {h_bb, h_bn} <= '0;
+    h_bb <= 57'd0;
+    h_bn <= 6'd0;
     if(~rstn | g_sof) begin
         h_eof <= 1'b0;
     end else begin
@@ -767,42 +816,46 @@ reg [15:0] j_data;
 reg[247:0] j_bbuf;
 reg [ 7:0] j_bcnt;
 
+reg [247:0] bbuf;         // not real register
+reg [  7:0] bcnt;         // not real register
+
 always @ (posedge clk) begin
     j_sof <= h_sof & rstn;
-    {j_e, j_data} <= '0;
+    j_e    <= 1'b0;
+    j_data <= 16'h0;
     if(~rstn | h_sof) begin
-        {j_eof, j_bbuf, j_bcnt} <= '0;
+        j_eof  <= 1'b0;
+        j_bbuf <= 248'd0;
+        j_bcnt <= 8'h0;
     end else begin
-        logic [247:0] bbuf;
-        logic [  7:0] bcnt;
         bbuf = j_bbuf | ({h_bb,191'h0} >> j_bcnt);
         bcnt = j_bcnt + {2'd0,h_bn};
         if(bcnt >= 8'd16) begin
             j_e <= 1'b1;
             j_data[15:8] <= bbuf[247:240];
-            if(bbuf[247:240] == '1) begin
+            if(bbuf[247:240] == 8'hFF) begin
                 bbuf = {1'h0, bbuf[239:0], 7'h0};
-                bcnt -= 8'd7;
+                bcnt = bcnt - 8'd7;
             end else begin
                 bbuf = {      bbuf[239:0], 8'h0};
-                bcnt -= 8'd8;
+                bcnt = bcnt - 8'd8;
             end
             j_data[ 7:0] <= bbuf[247:240];
-            if(bbuf[247:240] == '1) begin
+            if(bbuf[247:240] == 8'hFF) begin
                 bbuf = {1'h0, bbuf[239:0], 7'h0};
-                bcnt -= 8'd7;
+                bcnt = bcnt - 8'd7;
             end else begin
                 bbuf = {      bbuf[239:0], 8'h0};
-                bcnt -= 8'd8;
+                bcnt = bcnt - 8'd8;
             end
         end else if(h_eof && bcnt > 8'd0) begin
             j_e <= 1'b1;
             j_data[15:8] <= bbuf[247:240];
-            if(bbuf[247:240] == '1)
+            if(bbuf[247:240] == 8'hFF)
                 j_data[ 7:0] <= {1'b0,bbuf[239:233]};
             else
                 j_data[ 7:0] <= bbuf[239:232];
-            bbuf = '0;
+            bbuf = 248'd0;
             bcnt = 8'd0;
         end
         j_bbuf <= bbuf;
@@ -816,7 +869,7 @@ end
 // make .jls file header and footer
 //-------------------------------------------------------------------------------------------------------------------
 reg [15:0] jls_wl, jls_hl;
-wire[15:0] jls_header [13];
+wire[15:0] jls_header [0:12];
 assign jls_header[0] = 16'hFFD8;
 assign jls_header[1] = 16'h00FF;
 assign jls_header[2] = 16'hF700;
@@ -831,10 +884,11 @@ assign jls_header[10]= 16'h0101;
 assign jls_header[11]= {13'b0,NEAR};
 assign jls_header[12]= 16'h0000;
 wire[15:0] jls_footer = 16'hFFD9;
+
 always @ (posedge clk)
     if(~rstn) begin
-        jls_wl <= '0;
-        jls_hl <= '0;
+        jls_wl <= 16'd0;
+        jls_hl <= 16'd0;
     end else begin
         jls_wl <= {2'd0,a_wl} + 16'd1;
         jls_hl <= {2'd0,a_hl} + 16'd1;
@@ -853,21 +907,21 @@ reg [15:0] k_data;
 always @ (posedge clk) begin
     k_last <= 1'b0;
     k_e <= 1'b0;
-    k_data <= '0;
+    k_data <= 16'd0;
     if(j_sof) begin
-        k_footer_i <= '0;
+        k_footer_i <= 1'b0;
         if(k_header_i < 4'd13) begin
             k_e <= 1'b1;
             k_data <= jls_header[k_header_i];
             k_header_i <= k_header_i + 4'd1;
         end
     end else if(j_e) begin
-        k_header_i <= '0;
-        k_footer_i <= '0;
+        k_header_i <= 4'd0;
+        k_footer_i <= 1'b0;
         k_e <= 1'b1;
         k_data <= j_data;
     end else if(j_eof) begin
-        k_header_i <= '0;
+        k_header_i <= 4'd0;
         k_footer_i <= 1'b1;
         if(~k_footer_i) begin
             k_last <= 1'b1;
@@ -875,8 +929,8 @@ always @ (posedge clk) begin
             k_data <= jls_footer;
         end
     end else begin
-        k_header_i <= '0;
-        k_footer_i <= '0;
+        k_header_i <= 4'd0;
+        k_footer_i <= 1'b0;
     end
 end
 
@@ -884,7 +938,7 @@ end
 //-------------------------------------------------------------------------------------------------------------------
 // linebuffer for context pixels
 //-------------------------------------------------------------------------------------------------------------------
-reg [7:0] linebuffer [1<<14];
+reg [7:0] linebuffer [0:(1<<14)-1];
 always @ (posedge clk)  // line buffer read
     c_d <= linebuffer[a_ii];
 always @ (posedge clk)  // line buffer write

@@ -10,10 +10,10 @@
 
 `timescale 1ps/1ps
 
-`define NEAR 1     // NEAR can be 0~7
+`define NEAR          1    // NEAR can be 0~7
 
-`define FILE_NO_FIRST 1   // first input file name is test000.pgm
-`define FILE_NO_FINAL 8   // final input file name is test000.pgm
+`define FILE_NO_FIRST 1    // first input file name is test000.pgm
+`define FILE_NO_FINAL 8    // final input file name is test000.pgm
 
 
 // bubble numbers that insert between pixels
@@ -51,30 +51,33 @@ initial begin repeat(4) @(posedge clk); rstn<=1'b1; end
 // -------------------------------------------------------------------------------------------------------------------
 //   signals for jls_encoder_i module
 // -------------------------------------------------------------------------------------------------------------------
-reg        i_sof = '0;
-reg [13:0] i_w = '0;
-reg [13:0] i_h = '0;
-reg        i_e = '0;
-reg [ 7:0] i_x = '0;
+reg        i_sof = 0;
+reg [13:0] i_w = 0;
+reg [13:0] i_h = 0;
+reg        i_e = 0;
+reg [ 7:0] i_x = 0;
 wire       o_e;
 wire[15:0] o_data;
 wire       o_last;
 
 
 
-logic [7:0] img [4096*4096];
-int w = 0, h = 0;
+reg [7:0] img [4096*4096-1:0];
+integer w = 0, h = 0;
 
-task automatic load_img(input logic [256*8:1] fname);
-    int linelen, depth=0, scanf_num;
-    logic [256*8-1:0] line;
-    int fp = $fopen(fname, "rb");
-    if(fp==0) begin
+task load_img;
+    input [256*8:1] fname;
+    reg [256*8-1:0] line;
+    integer linelen, depth, scanf_num, fp, i;
+begin
+    depth = 0;
+    fp = $fopen(fname, "rb");
+    if (fp==0) begin
         $display("*** error: could not open file %s", fname);
         $finish;
     end
     linelen = $fgets(line, fp);
-    if(line[8*(linelen-2)+:16] != 16'h5035) begin
+    if (line[8*(linelen-2)+:16] != 16'h5035) begin
         $display("*** error: the first line must be P5");
         $fclose(fp);
         $finish;
@@ -87,15 +90,17 @@ task automatic load_img(input logic [256*8:1] fname);
     end
     scanf_num = $fgets(line, fp);
     scanf_num = $sscanf(line, "%d", depth);
-    if(depth!=255) begin
+    if (depth!=255) begin
         $display("*** error: images depth must be 255");
         $fclose(fp);
         $finish;
     end
-    for(int i=0; i<h*w; i++)
+    for (i=0; i<h*w; i=i+1)
         img[i] = $fgetc(fp);
     $fclose(fp);
+end
 endtask
+
 
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -108,20 +113,21 @@ endtask
 //              when > 0, insert bubble_control bubbles
 //              when < 0, insert random 0~bubble_control bubbles
 // -------------------------------------------------------------------------------------------------------------------
-task automatic feed_img(input int bubble_control);
-    int num_bubble;
-    
+task feed_img;
+    input integer bubble_control;
+    integer       num_bubble, i;
+begin
     // start feeding a image by assert i_sof for 368 cycles
     repeat(368) begin
         @(posedge clk)
         i_sof <= 1'b1;
         i_w <= w - 1;
         i_h <= h - 1;
-        {i_e, i_x} <= '0;
+        {i_e, i_x} <= 0;
     end
     
     // for all pixels of the image
-    for(int i=0; i<h*w; i++) begin
+    for(i=0; i<h*w; i=i+1) begin
         
         // calculate how many bubbles to insert
         if(bubble_control<0) begin
@@ -133,17 +139,18 @@ task automatic feed_img(input int bubble_control);
         end
         
         // insert bubbles
-        repeat(num_bubble) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= '0;
+        repeat(num_bubble) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= 0;
         
         // assert i_e to input a pixel
         @(posedge clk)
-        {i_sof, i_w, i_h} <= '0;
+        {i_sof, i_w, i_h} <= 0;
         i_e <= 1'b1;
         i_x <= img[i];
     end
     
     // 16 cycles idle between images
-    repeat(16) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= '0;
+    repeat(16) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= 0;
+end
 endtask
 
 
@@ -170,10 +177,11 @@ jls_encoder #(
 // -------------------------------------------------------------------------------------------------------------------
 //  read images, feed them to jls_encoder_i module 
 // -------------------------------------------------------------------------------------------------------------------
-int file_no;    // file number
+integer file_no;    // file number
+reg [256*8:1] input_file_name;
+reg [256*8:1] input_file_format;
+
 initial begin
-    logic [256*8:1] input_file_name;
-    logic [256*8:1] input_file_format;
     $sformat(input_file_format , "%s\\%s.pgm",  `INPUT_PGM_DIR, `FILE_NAME_FORMAT);
     
     while(~rstn) @ (posedge clk);
@@ -182,7 +190,7 @@ initial begin
         $sformat(input_file_name, input_file_format , file_no);
 
         load_img(input_file_name);
-        $display("%s (%5dx%5d)", input_file_name, w, h);
+        $display("%100s (%5dx%5d)", input_file_name, w, h);
 
         if( w < 5 || w > 16384 || h < 1 || h > 16383 )         // image size not supported
             $display("  *** image size not supported ***");
@@ -202,8 +210,8 @@ end
 logic [256*8:1] output_file_format;
 initial $sformat(output_file_format, "%s\\%s.jls", `OUTPUT_JLS_DIR, `FILE_NAME_FORMAT);
 logic [256*8:1] output_file_name;
-int opened = 0;
-int jls_file = 0;
+integer opened = 0;
+integer jls_file = 0;
 
 always @ (posedge clk)
     if(o_e) begin
