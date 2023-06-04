@@ -161,6 +161,7 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 - Simple JPEG-LS baseline encoder in C language : https://github.com/WangXuan95/JPEG-LS 
+- Another Ultra High Performance FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
 
 　
 
@@ -325,3 +326,4 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 - 精简的 JPEG-LS baseline 编码器 (C语言) : https://github.com/WangXuan95/JPEG-LS 
+- 另一个高性能的 FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
