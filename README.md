@@ -160,7 +160,8 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
-- Simple JPEG-LS baseline encoder in C language : https://github.com/WangXuan95/JPEG-LS 
+- CharLS, a C++ JPEG-LS library implementation : https://github.com/team-charls/charls
+- A Simple JPEG-LS baseline encoder in C language : https://github.com/WangXuan95/JPEG-LS 
 - Another Ultra High Performance FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
 
 　
