@@ -41,7 +41,7 @@ If you are interested in the software implementation of JPEG-LS baseline encoder
 **jls_encoder** has a parameter:
 
 ```verilog
-parameter logic [2:0] NEAR
+parameter  [2:0] NEAR
 ```
 
 which determines the NEAR value of JPEG-LS algorithm. When the value is 3'd0, it works in lossless mode; when the value is 3'd1~3'd7, it works in lossy mode.
@@ -210,7 +210,7 @@ RTL 目录中的 [**jls_encoder.v**](./RTL/jls_encoder.v) 是用户可以调用�
 **jls_encoder** 只有一个参数：
 
 ```verilog
-parameter logic [2:0] NEAR
+parameter  [2:0] NEAR
 ```
 
 决定了 **NEAR** 值，取值为 3'd0 时，工作在无损模式；取值为  3'd1~3'd7 时，工作在有损模式。
