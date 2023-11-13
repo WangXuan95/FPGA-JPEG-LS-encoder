@@ -30,7 +30,7 @@ If you are interested in the software implementation of JPEG-LS baseline encoder
 
 # Module Usage
 
-[**jls_encoder.sv**](./RTL/jls_encoder.sv) in the [RTL](./RTL) directory is a JPEG-LS compression module that can be call by the FPGA users, which inputs image raw pixels and outputs a JPEG-LS compressed stream.
+[**jls_encoder.v**](./RTL/jls_encoder.v) in the [RTL](./RTL) directory is a JPEG-LS compression module that can be call by the FPGA users, which inputs image raw pixels and outputs a JPEG-LS compressed stream.
 
 ## Module parameter
 
@@ -99,7 +99,7 @@ During the input, **jls_encoder** will also output a compressed **JPEG-LS stream
 
 Simulation related files are in the [SIM](./SIM) directory, including:
 
-* [tb_jls_encoder.sv](./SIM) is a testbench for jls_encoder. The behavior is: batch uncompressed images in .pgm format in the specified folder into jls_encoder for compression, and then save the output of jls_encoder to a .jls file.
+* [tb_jls_encoder.v](./SIM) is a testbench for jls_encoder. The behavior is: batch uncompressed images in .pgm format in the specified folder into jls_encoder for compression, and then save the output of jls_encoder to a .jls file.
 * [tb_jls_encoder_run_iverilog.bat](./SIM) is a command script for iverilog simulation.
 * The [images](./SIM) folder contains several image files in .pgm format. The .pgm format stores an uncompressed (that is, raw pixel) 8bit grayscale image, which can be opened with photoshop software or a Linux image viewer (Windows image viewer cannot view it).
 
@@ -113,8 +113,8 @@ After the simulation is over, you can see that several .jls files are generated 
 
 In addition, you can also modify some simulation parameters:
 
-- Modify the macro **NEAR** in tb_jls_encoder.sv to change the compression ratio.
-- Modify the macro **BUBBLE_CONTROL** in tb_jls_encoder.sv to determine how many bubbles to insert between adjacent input pixels:
+- Modify the macro **NEAR** in tb_jls_encoder.v to change the compression ratio.
+- Modify the macro **BUBBLE_CONTROL** in tb_jls_encoder.v to determine how many bubbles to insert between adjacent input pixels:
   - When **BUBBLE_CONTROL=0**, no bubbles are inserted.
   - When **BUBBLE_CONTROL>0**, insert **BUBBLE_CONTROL ** bubbles.
   - When **BUBBLE_CONTROL<0**, insert random **0~(-BUBBLE_CONTROL)** bubbles each time.
@@ -195,7 +195,7 @@ JPEG-LS 的标准文档详见 ITU-T T.87
 
 # 使用方法
 
-RTL 目录中的 [**jls_encoder.sv**](./RTL/jls_encoder.sv) 是用户可以调用的 JPEG-LS 压缩模块，它输入图像原始像素，输出 JPEG-LS 压缩流。
+RTL 目录中的 [**jls_encoder.v**](./RTL/jls_encoder.v) 是用户可以调用的 JPEG-LS 压缩模块，它输入图像原始像素，输出 JPEG-LS 压缩流。
 
 ## 模块参数
 
@@ -264,7 +264,7 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 仿真相关文件都在 SIM 目录里，包括：
 
-* tb_jls_encoder.sv 是针对 jls_encoder 的 testbench。行为是：将指定文件夹里的 .pgm 格式的未压缩图像批量送入 jls_encoder 进行压缩，然后将 jls_encoder 的输出结果保存到 .jls 文件里。
+* tb_jls_encoder.v 是针对 jls_encoder 的 testbench。行为是：将指定文件夹里的 .pgm 格式的未压缩图像批量送入 jls_encoder 进行压缩，然后将 jls_encoder 的输出结果保存到 .jls 文件里。
 * tb_jls_encoder_run_iverilog.bat 包含了执行 iverilog 仿真的命令。
 * images 文件夹包含几张 .pgm 格式的图像文件。 .pgm 格式存储的是未压缩（也就是存储原始像素）的 8bit 灰度图像，可以使用 photoshop 软件或 Linux 图像查看器就能打开它（Windows图像查看器查看不了它）。
 
@@ -278,8 +278,8 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 另外，你还可以修改一些仿真参数来进行：
 
-- 修改 tb_jls_encoder.sv 里的宏名 **NEAR** 来改变压缩率。
-- 修改 tb_jls_encoder.sv 里的宏名 **BUBBLE_CONTROL** 来决定输入相邻的像素间插入多少个气泡：
+- 修改 tb_jls_encoder.v 里的宏名 **NEAR** 来改变压缩率。
+- 修改 tb_jls_encoder.v 里的宏名 **BUBBLE_CONTROL** 来决定输入相邻的像素间插入多少个气泡：
   - **BUBBLE_CONTROL=0** 时，不插入任何气泡。
   - **BUBBLE_CONTROL>0** 时，插入 **BUBBLE_CONTROL **个气泡。
   - **BUBBLE_CONTROL<0** 时，每次插入随机的 **0~(-BUBBLE_CONTROL)** 个气泡
