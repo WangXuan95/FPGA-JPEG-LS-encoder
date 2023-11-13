@@ -20,7 +20,11 @@
 
 # Background
 
-**JPEG-LS** (**JLS**) is a lossless/lossy image compression algorithm which has the best lossless compression ratio compared to PNG, Lossless-JPEG2000, Lossless-WEBP, Lossless-HEIF, etc. **JPEG-LS** uses the maximum difference between the pixels before and after compression (**NEAR** value) to control distortion, **NEAR=0** is the lossless mode; **NEAR>0** is the lossy mode, the larger the **NEAR**, the greater the distortion and the greater the compression ratio. The file suffix name for **JPEG-LS** compressed image is .**jls** .
+**JPEG-LS** (**JLS**) is a lossless/lossy image compression algorithm which has the best lossless compression ratio compared to PNG, Lossless-JPEG2000, Lossless-WEBP, Lossless-HEIF, etc.
+
+**JPEG-LS** uses the maximum difference between the pixels before and after compression (**NEAR** value) to control distortion, **NEAR=0** is the lossless mode; **NEAR>0** is the lossy mode, the larger the **NEAR**, the greater the distortion and the greater the compression ratio.
+
+The file suffix name for **JPEG-LS** compressed image is .**jls** .
 
 For JPEG-LS standard specification, see ITU-T T.87.
 
@@ -185,7 +189,11 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 
 # 背景知识
 
-**JPEG-LS** （简称**JLS**）是一种无损/有损的图像压缩算法，其无损模式的压缩率相当优异，优于 PNG、Lossless-JPEG2000、Lossless-WEBP、Lossless-HEIF 等。**JPEG-LS** 用压缩前后的像素的最大差值（**NEAR**值）来控制失真，无损模式下 **NEAR=0**；有损模式下**NEAR>0**，**NEAR** 越大，失真越大，压缩率也越大。**JPEG-LS** 压缩图像的文件后缀是 .**jls** 。
+**JPEG-LS** （简称**JLS**）是一种无损/有损的图像压缩算法，其无损模式的压缩率相当优异，优于 PNG、Lossless-JPEG2000、Lossless-WEBP、Lossless-HEIF 等。
+
+**JPEG-LS** 用压缩前后的像素的最大差值（**NEAR**值）来控制失真，无损模式下 **NEAR=0**；有损模式下**NEAR>0**，**NEAR** 越大，失真越大，压缩率也越大。
+
+**JPEG-LS** 压缩图像的文件后缀是 .**jls** 。
 
 JPEG-LS 的标准文档详见 ITU-T T.87
 
