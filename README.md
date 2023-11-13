@@ -22,10 +22,9 @@
 
 **JPEG-LS** (**JLS**) is a lossless/lossy image compression algorithm which has the best lossless compression ratio compared to PNG, Lossless-JPEG2000, Lossless-WEBP, Lossless-HEIF, etc. **JPEG-LS** uses the maximum difference between the pixels before and after compression (**NEAR** value) to control distortion, **NEAR=0** is the lossless mode; **NEAR>0** is the lossy mode, the larger the **NEAR**, the greater the distortion and the greater the compression ratio. The file suffix name for **JPEG-LS** compressed image is .**jls** .
 
-JPEG-LS has two generations:
+For JPEG-LS standard specification, see ITU-T T.87.
 
-- JPEG-LS baseline (ITU-T T.87): JPEG-LS refers to the JPEG-LS baseline by default. **This repo implements the encoder of JPEG-LS baseline**. If you are interested in the software version of JPEG-LS baseline encoder, see https://github.com/WangXuan95/JPEG-LS (C language)
-- JPEG-LS extension (ITU-T T.870): Its compression ratio is higher than JPEG-LS baseline, but it is very rarely (even no code can be found online). **This repo is not about JPEG-LS extension**. However, I have a C implemented of JPEG-LS extension, see https://github.com/WangXuan95/JPEG-LS_extension
+If you are interested in the software implementation of JPEG-LS baseline encoder, see https://github.com/WangXuan95/JPEG-LS (C language)
 
 　
 
@@ -188,10 +187,9 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 
 **JPEG-LS** （简称**JLS**）是一种无损/有损的图像压缩算法，其无损模式的压缩率相当优异，优于 PNG、Lossless-JPEG2000、Lossless-WEBP、Lossless-HEIF 等。**JPEG-LS** 用压缩前后的像素的最大差值（**NEAR**值）来控制失真，无损模式下 **NEAR=0**；有损模式下**NEAR>0**，**NEAR** 越大，失真越大，压缩率也越大。**JPEG-LS** 压缩图像的文件后缀是 .**jls** 。
 
-JPEG-LS 有两代：
+JPEG-LS 的标准文档详见 ITU-T T.87
 
-- JPEG-LS baseline (ITU-T T.87) : 一般提到 JPEG-LS 默认都是指 JPEG-LS baseline。**本库也实现的是 JPEG-LS baseline 的 encoder** 。如果你对软件版本的 JPEG-LS baseline encoder 感兴趣，可以看 https://github.com/WangXuan95/JPEG-LS (C语言实现)
-- JPEG-LS extension (ITU-T T.870) : 其压缩率高于 JPEG-LS baseline ，但使用的非常少 (在网上搜不到任何代码) 。**本库与 JPEG-LS extension 无关！**不过我依照 ITU-T T.870 实现了 C 语言的 JPEG-LS extension，见 https://github.com/WangXuan95/JPEG-LS_extension
+如果你对软件版本的 JPEG-LS baseline encoder 感兴趣，可以看 https://github.com/WangXuan95/JPEG-LS (C语言实现)
 
 　
 
@@ -326,5 +324,6 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
+- CharLS, a C++ JPEG-LS library implementation : https://github.com/team-charls/charls
 - 精简的 JPEG-LS baseline 编码器 (C语言) : https://github.com/WangXuan95/JPEG-LS 
 - 另一个高性能的 FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
