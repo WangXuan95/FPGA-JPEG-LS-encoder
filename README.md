@@ -60,7 +60,7 @@ The input and output signals of **jls_encoder** are described in the following t
 |  i_e   |  input valid   |    in     | 1bit  | i_e=1 indicates a valid input pixel is on i_x                |
 |  i_x   |  input pixel   |    in     | 8bit  | The pixel value range is 8'd0 ~ 8'd255 .                     |
 |  o_e   |  output valid  |    out    | 1bit  | o_e=1 indicates a valid data is on o_data.                   |
-| o_data |  output data   |    out    | 16bit | Big endian, odata[15:8] online; odata[7:0] after.            |
+| o_data |  output data   |    out    | 16bit | Little endian, odata[7:0] before, odata[15:8] after.         |
 | o_last |  output last   |    out    | 1bit  | o_last=1, indicate that this is the last data of the output stream of an image. |
 
 > Note：i_w cannot less than 14'd4 。
@@ -72,11 +72,11 @@ The operation flow of  **jls_encoder** module is:
 1. **Reset** (optional): Set `rstn=0` for at least **1 cycle** to reset, and then keep `rstn=1` during normal operation. In fact, it is not necessary to reset.
 2. **Start**: keep `i_sof=1` **at least 368 cycles**, while inputting the width and height of the image on the `i_w` and `i_h` signals, `i_w` and `i_h` should remain valid during` i_sof=1`.
 3. **Input**: Control `i_e` and `i_x`, input all the pixels of the image from left to right, top to bottom. When `i_e=1`, `i_x` is input as a pixel.
-4. **Idle between images**: After all pixel input ends, it needs to be idle for at least 16 cycles without any action (i.e. `i_sof=0`, `i_e=0`). Then you can skip to step 2 and start the next image.
+4. **Idle between images**: After all pixel input ends, it needs to be idle for at least 32 cycles without any action (i.e. `i_sof=0`, `i_e=0`). Then you can skip to step 2 and start the next image.
 
 Between `i_sof=1` and `i_e=1`; and between `i_e=1` each can insert any number of free bubbles (ie, `i_sof=0`, `i_e=0`), which means that we can input pixels intermittently (of course, without inserting any bubbles for maximum performance).
 
-The following figure shows the input timing diagram of compressing 2 images (//represents omitting several cycles, X represents don't care). where image 1 has 1 bubble inserted after the first pixel is entered; while image 2 has 1 bubble inserted after i_sof=1. Note **Inter-image idle** must be at least **16 cycles**.
+The following figure shows the input timing diagram of compressing 2 images (//represents omitting several cycles, X represents don't care). where image 1 has 1 bubble inserted after the first pixel is entered; while image 2 has 1 bubble inserted after i_sof=1. Note **Inter-image idle** must be at least **32 cycles**.
 
                __    __//  __    __    __    __   //_    __    //    __    __//  __    __    __    //    __
     clk    \__/  \__/  //_/  \__/  \__/  \__/  \__// \__/  \__///\__/  \__/  //_/  \__/  \__/  \__///\__/  \_
@@ -95,7 +95,7 @@ The following figure shows the input timing diagram of compressing 2 images (//r
 
 ## Output JLS stream
 
-During the input, **jls_encoder** will also output a compressed **JPEG-LS stream**, which constitutes the content of the complete .jls file (including the file header and trailer). When `o_e=1`, `o_data` is a valid output data. Among them, `o_data` follows the big endian order, that is, `o_data[15:8]` is at the front of the stream, and `o_data[7:0]` is at the back of the stream. `o_last=1` indicates the end of the compressed stream for an image when the output stream for each image encounters the last data.
+During the input, **jls_encoder** will also output a compressed **JPEG-LS stream**, which constitutes the content of the complete .jls file (including the file header and trailer). When `o_e=1`, `o_data` is a valid output data. Among them, `o_data` follows the little endian order, that is, `o_data[7:0]` is at the front of the stream, and `o_data[15:8]` is at the back of the stream. `o_last=1` indicates the end of the compressed stream for an image when the output stream for each image encounters the last data.
 
 　
 
@@ -131,19 +131,19 @@ Because **JPEG-LS** is niche and professional, most image viewing software canno
 
 You can try [this site](https://filext.com/file-extension/JLS) to view .jls files (though this site doesn't work sometimes).
 
-If the website doesn't work, you can use the decompressor [decoder.exe](./SIM) I provided to decompress it back to a .pgm file and view it again. Please run the command with CMD in the [SIM](./SIM) directory:
+If the website doesn't work, you can use the decompressor [JPEGLSdec.exe](./SIM) I provided to decompress it back to a .pgm file and view it again. Please run the command with CMD in the [SIM](./SIM) directory:
 
 ```powershell
-.\decoder.exe <JLS_FILE_NAME> <PGM_FILE_NAME>
+JPEGLSdec.exe <JLS_FILE_NAME> -o<PGM_FILE_NAME>
 ```
 
 For example:
 
 ```powershell
-.\decoder.exe test000.jls tmp.pgm
+JPEGLSdec.exe test001.jls -otmp.pgm
 ```
 
-> Note: decoder.exe is compiled from the C language source code provided by UBC : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
+> Note: JPEGLSdec.exe is compiled from the C language source code provided by UBC : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 
 　
 
@@ -182,7 +182,7 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 * 用于压缩 **8bit** 的灰度图像。
 * 可选**无损模式**，即 NEAR=0 。
 * 可选**有损模式**，NEAR=1~7 可调。
-* 图像宽度取值范围为 [5,16384]，高度取值范围为 [1,16384]。
+* 图像宽度取值范围为 [5,16384]，高度取值范围为 [1,16383]。
 * 极简流式输入输出。
 
 　
@@ -229,7 +229,7 @@ parameter  [2:0] NEAR
 | i_e | 输入像素有效 | input | 1bit | 当 i_e=1 时，一个像素需要被输入到 i_x 上。 |
 | i_x | 输入像素    | input | 8bit | 像素取值范围为 8'd0 ~ 8'd255 。 |
 | o_e | 输出有效    | output | 1bit | 当 o_e=1 时，输出流数据产生在 o_data 上。 |
-| o_data | 输出流数据 | output | 16bit | 大端序，o_data[15:8] 在先；o_data[7:0] 在后。 |
+| o_data | 输出流数据 | output | 16bit | 小端序，o_data[7:0] 在先；o_data[15:8] 在后。 |
 | o_last | 输出流末尾 | output | 1bit | 当 o_e=1 时若 o_last=1 ，说明这是一张图像的输出流的最后一个数据。 |
 
 > 注：i_w 不能小于 14'd4 。
@@ -241,11 +241,11 @@ parameter  [2:0] NEAR
 1. **复位**（可选）：令 rstn=0 至少 **1 个周期**进行复位，之后正常工作时都保持 rstn=1。实际上也可以不复位（即让 rstn 恒为1）。
 2. **开始**：保持 i_sof=1 **至少 368 个周期**，同时在 i_w 和 i_h 信号上输入图像的宽度和高度，i_sof=1 期间 i_w 和 i_h 要一直保持有效。
 3. **输入**：控制 i_e 和 i_x，从左到右，从上到下地输入该图像的所有像素。当 i_e=1 时，i_x 作为一个像素被输入。
-4. **图像间空闲**：所有像素输入结束后，需要空闲**至少 16 个周期**不做任何动作（即 i_sof=0，i_e=0）。然后才能跳到第2步，开始下一个图像。
+4. **图像间空闲**：所有像素输入结束后，需要空闲**至少 32 个周期**不做任何动作（即 i_sof=0，i_e=0）。然后才能跳到第2步，开始下一个图像。
 
 i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲气泡（即， i_sof=0，i_e=0），这意味着我们可以断断续续地输入像素（当然，不插入任何气泡才能达到最高性能）。
 
-下图展示了压缩 2 张图像的输入时序图（//代表省略若干周期，X代表don't care）。其中图像 1 在输入第一个像素后插入了 1 个气泡；而图像 2 在 i_sof=1 后插入了 1 个气泡。注意**图像间空闲**必须至少 **16 个周期**。
+下图展示了压缩 2 张图像的输入时序图（//代表省略若干周期，X代表don't care）。其中图像 1 在输入第一个像素后插入了 1 个气泡；而图像 2 在 i_sof=1 后插入了 1 个气泡。注意**图像间空闲**必须至少 **32 个周期**。
 
                __    __//  __    __    __    __   //_    __    //    __    __//  __    __    __    //    __
     clk    \__/  \__/  //_/  \__/  \__/  \__/  \__// \__/  \__///\__/  \__/  //_/  \__/  \__/  \__///\__/  \_
@@ -264,7 +264,7 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 ## 输出压缩流
 
-在输入过程中，**jls_encoder** 同时会输出压缩好的 **JPEG-LS流**，该流构成了完整的 .jls 文件的内容（包括文件头部和尾部）。o_e=1 时，o_data 是一个有效输出数据。其中，o_data 遵循大端序，即 o_data[15:8] 在流中的位置靠前，o_data[7:0] 在流中的位置靠后。在每个图像的输出流遇到最后一个数据时，o_last=1 指示一张图像的压缩流结束。
+在输入过程中，**jls_encoder** 同时会输出压缩好的 **JPEG-LS流**，该流构成了完整的 .jls 文件的内容（包括文件头部和尾部）。o_e=1 时，o_data 是一个有效输出数据。其中，o_data 遵循小端序，即 o_data[7:0] 在流中的位置靠前，o_data[15:8] 在流中的位置靠后。在每个图像的输出流遇到最后一个数据时，o_last=1 指示一张图像的压缩流结束。
 
 　
 
@@ -300,19 +300,19 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 你可以试试用[该网站](https://filext.com/file-extension/JLS)来查看 .jls 文件（不过这个网站时常失效）。
 
-如果该网站失效，可以用我提供的解压器 decoder.exe 来把它解压回 .pgm 文件再查看。请在 SIM 目录下用 CMD 运行命令：
+如果该网站失效，可以用我提供的解压器 JPEGLSdec.exe 来把它解压回 .pgm 文件再查看。请在 SIM 目录下用 CMD 运行命令：
 
 ```powershell
-.\decoder.exe <JLS_FILE_NAME> <PGM_FILE_NAME>
+JPEGLSdec.exe <JLS_FILE_NAME> -o<PGM_FILE_NAME>
 ```
 
 例如：
 
 ```powershell
-.\decoder.exe test000.jls tmp.pgm
+JPEGLSdec.exe test001.jls -otmp.pgm
 ```
 
-> 注：decoder.exe 编译自 UBC 提供的 C 语言源码： http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
+> 注：JPEGLSdec.exe 编译自 UBC 提供的 C 语言源码： http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 
 　
 

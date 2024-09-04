@@ -10,19 +10,17 @@
 
 `timescale 1ps/1ps
 
-`define NEAR          1    // NEAR can be 0~7
+`define NEAR            1    // NEAR can be 0~7
 
-`define FILE_NO_FIRST 1    // first input file name is test000.pgm
-`define FILE_NO_FINAL 8    // final input file name is test000.pgm
+`define FILE_NO_FIRST   1    // first input file number
+`define FILE_NO_FINAL   22   // final input file number
 
 
 // bubble numbers that insert between pixels
 //    when = 0, do not insert bubble
 //    when > 0, insert BUBBLE_CONTROL bubbles
 //    when < 0, insert random 0~(-BUBBLE_CONTROL) bubbles
-`define BUBBLE_CONTROL -2
-
-
+`define BUBBLE_CONTROL  (-1)
 
 
 // the input and output file names' format
@@ -32,18 +30,18 @@
 `define INPUT_PGM_DIR     "./images"
 
 // output file (compressed .jls file) directory
-`define OUTPUT_JLS_DIR    "./"
+`define OUTPUT_JLS_DIR    "."
 
 
 module tb_jls_encoder ();
 
-initial $dumpvars(1, tb_jls_encoder);
+//initial $dumpvars(1, tb_jls_encoder);
 
 // -------------------------------------------------------------------------------------------------------------------
 //   generate clock and reset
 // -------------------------------------------------------------------------------------------------------------------
-reg      rstn = 1'b0;
-reg       clk = 1'b0;
+reg          rstn = 1'b0;
+reg           clk = 1'b0;
 always #50000 clk = ~clk;  // 10MHz
 initial begin repeat(4) @(posedge clk); rstn<=1'b1; end
 
@@ -57,12 +55,12 @@ reg [13:0] i_h = 0;
 reg        i_e = 0;
 reg [ 7:0] i_x = 0;
 wire       o_e;
-wire[15:0] o_data;
 wire       o_last;
+wire[15:0] o_data;
 
 
 
-reg [7:0] img [4096*4096-1:0];
+reg [7:0] img [8192*8192-1:0];
 integer w = 0, h = 0;
 
 task load_img;
@@ -148,8 +146,8 @@ begin
         i_x <= img[i];
     end
     
-    // 16 cycles idle between images
-    repeat(16) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= 0;
+    // 32 cycles idle between images
+    repeat(32) @(posedge clk) {i_sof, i_w, i_h, i_e, i_x} <= 0;
 end
 endtask
 
@@ -159,7 +157,7 @@ endtask
 // -------------------------------------------------------------------------------------------------------------------
 jls_encoder #(
     .NEAR     ( `NEAR     )
-) jls_encoder_i (
+) u_jls_encoder (
     .rstn     ( rstn      ),
     .clk      ( clk       ),
     .i_sof    ( i_sof     ),
@@ -168,8 +166,8 @@ jls_encoder #(
     .i_e      ( i_e       ),
     .i_x      ( i_x       ),
     .o_e      ( o_e       ),
-    .o_data   ( o_data    ),
-    .o_last   ( o_last    )
+    .o_last   ( o_last    ),
+    .o_data   ( o_data    )
 );
 
 
@@ -192,7 +190,7 @@ initial begin
         load_img(input_file_name);
         $display("%100s (%5dx%5d)", input_file_name, w, h);
 
-        if( w < 5 || w > 16384 || h < 1 || h > 16383 )         // image size not supported
+        if( w < 5 || w > 16384 || h < 1 || h > 16384 )         // image size not supported
             $display("  *** image size not supported ***");
         else
             feed_img(`BUBBLE_CONTROL);
@@ -207,9 +205,9 @@ end
 // -------------------------------------------------------------------------------------------------------------------
 //  write output stream to .jls files 
 // -------------------------------------------------------------------------------------------------------------------
-logic [256*8:1] output_file_format;
+reg [256*8:1] output_file_format;
 initial $sformat(output_file_format, "%s\\%s.jls", `OUTPUT_JLS_DIR, `FILE_NAME_FORMAT);
-logic [256*8:1] output_file_name;
+reg [256*8:1] output_file_name;
 integer opened = 0;
 integer jls_file = 0;
 
@@ -224,7 +222,7 @@ always @ (posedge clk)
         
         // write data to file.
         if(opened != 0 && jls_file != 0)
-            $fwrite(jls_file, "%c%c", o_data[15:8], o_data[7:0]);
+            $fwrite(jls_file, "%c%c", o_data[7:0], o_data[15:8]);
         
         // if it is the last data of an output stream, close the file.
         if(o_last) begin

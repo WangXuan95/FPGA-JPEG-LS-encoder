@@ -17,8 +17,8 @@ module jls_encoder #(
     input  wire        i_e,     // input pixel enable
     input  wire [ 7:0] i_x,     // input pixel
     output wire        o_e,     // output data enable
-    output wire [15:0] o_data,  // output data
-    output wire        o_last   // indicate the last output data of a image
+    output wire        o_last,  // indicate the last output data of a image
+    output wire [15:0] o_data   // output data
 );
 
 
@@ -810,11 +810,14 @@ end
 // pipeline stage j: jls stream generate
 //-------------------------------------------------------------------------------------------------------------------
 reg        j_sof;
-reg        j_eof;
 reg        j_e;
+reg        j_last;
 reg [15:0] j_data;
 reg[247:0] j_bbuf;
 reg [ 7:0] j_bcnt;
+
+reg [ 1:0] state_footer;
+wire[15:0] jls_footer = 16'hFFD9;
 
 reg [247:0] bbuf;         // not real register
 reg [  7:0] bcnt;         // not real register
@@ -822,11 +825,12 @@ reg [  7:0] bcnt;         // not real register
 always @ (posedge clk) begin
     j_sof <= h_sof & rstn;
     j_e    <= 1'b0;
+    j_last <= 1'b0;
     j_data <= 16'h0;
     if(~rstn | h_sof) begin
-        j_eof  <= 1'b0;
         j_bbuf <= 248'd0;
-        j_bcnt <= 8'h0;
+        j_bcnt <= 8'd8;
+        state_footer <= 2'd0;
     end else begin
         bbuf = j_bbuf | ({h_bb,191'h0} >> j_bcnt);
         bcnt = j_bcnt + {2'd0,h_bn};
@@ -848,19 +852,29 @@ always @ (posedge clk) begin
                 bbuf = {      bbuf[239:0], 8'h0};
                 bcnt = bcnt - 8'd8;
             end
-        end else if(h_eof && bcnt > 8'd0) begin
-            j_e <= 1'b1;
-            j_data[15:8] <= bbuf[247:240];
-            if(bbuf[247:240] == 8'hFF)
-                j_data[ 7:0] <= {1'b0,bbuf[239:233]};
-            else
-                j_data[ 7:0] <= bbuf[239:232];
+        end else if(h_eof) begin
+            if (bcnt > 8'd0) begin
+                j_e <= 1'b1;
+                j_data[15:8] <= bbuf[247:240];
+                if (bbuf[247:240] == 8'hFF) begin
+                    j_data[ 7:0] <= {1'b0,bbuf[239:233]};
+                end else if (bcnt > 8'd8) begin
+                    j_data[ 7:0] <= bbuf[239:232];
+                end else begin
+                    j_data[ 7:0] <= jls_footer[15:8];
+                    state_footer <= 2'd1;
+                end
+            end else if (state_footer < 2'd2) begin
+                j_e    <= 1'b1;
+                j_last <= 1'b1;
+                j_data <= (state_footer==2'd0) ? jls_footer : {jls_footer[7:0], 8'd0};
+                state_footer <= 2'd2;
+            end
             bbuf = 248'd0;
             bcnt = 8'd0;
         end
         j_bbuf <= bbuf;
         j_bcnt <= bcnt;
-        j_eof <= h_eof;
     end
 end
 
@@ -869,21 +883,19 @@ end
 // make .jls file header and footer
 //-------------------------------------------------------------------------------------------------------------------
 reg [15:0] jls_wl, jls_hl;
-wire[15:0] jls_header [0:12];
+wire[15:0] jls_header [0:11];
 assign jls_header[0] = 16'hFFD8;
-assign jls_header[1] = 16'h00FF;
-assign jls_header[2] = 16'hF700;
-assign jls_header[3] = 16'h0B08;
-assign jls_header[4] = jls_hl;
-assign jls_header[5] = jls_wl;
-assign jls_header[6] = 16'h0101;
-assign jls_header[7] = 16'h1100;
-assign jls_header[8] = 16'hFFDA;
-assign jls_header[9] = 16'h0008;
-assign jls_header[10]= 16'h0101;
-assign jls_header[11]= {13'b0,NEAR};
-assign jls_header[12]= 16'h0000;
-wire[15:0] jls_footer = 16'hFFD9;
+assign jls_header[1] = 16'hFFF7;
+assign jls_header[2] = 16'h000B;
+assign jls_header[3] = {8'h08      , jls_hl[15:8]};
+assign jls_header[4] = {jls_hl[7:0], jls_wl[15:8]};
+assign jls_header[5] = {jls_wl[7:0], 8'h01};
+assign jls_header[6] = 16'h0111;
+assign jls_header[7] = 16'h00FF;
+assign jls_header[8] = 16'hDA00;
+assign jls_header[9] = 16'h0801;
+assign jls_header[10]= 16'h0100;
+assign jls_header[11]= {5'b0,NEAR, 8'h0};
 
 always @ (posedge clk)
     if(~rstn) begin
@@ -899,38 +911,27 @@ always @ (posedge clk)
 // pipeline stage k: add .jls file header and footer
 //-------------------------------------------------------------------------------------------------------------------
 reg  [3:0] k_header_i;
-reg        k_footer_i;
-reg        k_last;
 reg        k_e;
+reg        k_last;
 reg [15:0] k_data;
 
 always @ (posedge clk) begin
-    k_last <= 1'b0;
     k_e <= 1'b0;
+    k_last <= 1'b0;
     k_data <= 16'd0;
     if(j_sof) begin
-        k_footer_i <= 1'b0;
-        if(k_header_i < 4'd13) begin
+        if(k_header_i < 4'd12) begin
             k_e <= 1'b1;
             k_data <= jls_header[k_header_i];
             k_header_i <= k_header_i + 4'd1;
         end
     end else if(j_e) begin
         k_header_i <= 4'd0;
-        k_footer_i <= 1'b0;
         k_e <= 1'b1;
+        k_last <= j_last;
         k_data <= j_data;
-    end else if(j_eof) begin
-        k_header_i <= 4'd0;
-        k_footer_i <= 1'b1;
-        if(~k_footer_i) begin
-            k_last <= 1'b1;
-            k_e <= 1'b1;
-            k_data <= jls_footer;
-        end
     end else begin
         k_header_i <= 4'd0;
-        k_footer_i <= 1'b0;
     end
 end
 
@@ -948,9 +949,9 @@ always @ (posedge clk)  // line buffer write
 //-------------------------------------------------------------------------------------------------------------------
 // output signal
 //-------------------------------------------------------------------------------------------------------------------
+assign o_e    = k_e;
 assign o_last = k_last;
-assign o_e = k_e;
-assign o_data = k_data;
+assign o_data = {k_data[7:0], k_data[15:8]};
 
 
 endmodule
