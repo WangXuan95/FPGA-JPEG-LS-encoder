@@ -28,7 +28,7 @@ The file suffix name for **JPEG-LS** compressed image is .**jls** .
 
 For JPEG-LS standard specification, see ITU-T T.87.
 
-If you are interested in the software implementation of JPEG-LS baseline encoder, see https://github.com/WangXuan95/JPEG-LS (C language)
+If you are interested in the software implementation of JPEG-LS baseline encoder, see https://github.com/WangXuan95/ImCvt (C++ language)
 
 　
 
@@ -164,7 +164,7 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 - CharLS, a C++ JPEG-LS library implementation : https://github.com/team-charls/charls
-- A Simple JPEG-LS baseline encoder in C language : https://github.com/WangXuan95/JPEG-LS 
+- A Simple JPEG-LS baseline encoder in C language : https://github.com/WangXuan95/ImCvt
 - Another Ultra High Performance FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
 
 　
@@ -197,7 +197,7 @@ At 35MHz, the image compression performance is 35 Mpixel/s, which means the comp
 
 JPEG-LS 的标准文档详见 ITU-T T.87
 
-如果你对软件版本的 JPEG-LS baseline encoder 感兴趣，可以看 https://github.com/WangXuan95/JPEG-LS (C语言实现)
+如果你对软件版本的 JPEG-LS baseline encoder 感兴趣，可以看 https://github.com/WangXuan95/ImCvt (C++实现)
 
 　
 
@@ -333,5 +333,5 @@ JPEGLSdec.exe test001.jls -otmp.pgm
 - ITU-T T.87 : Information technology – Lossless and near-lossless compression of continuous-tone still images – Baseline : https://www.itu.int/rec/T-REC-T.87/en
 - UBC's JPEG-LS baseline Public Domain Code : http://www.stat.columbia.edu/~jakulin/jpeg-ls/mirror.htm
 - CharLS, a C++ JPEG-LS library implementation : https://github.com/team-charls/charls
-- 精简的 JPEG-LS baseline 编码器 (C语言) : https://github.com/WangXuan95/JPEG-LS 
+- 精简的 JPEG-LS baseline 编码器 (C语言) : https://github.com/WangXuan95/ImCvt 
 - 另一个高性能的 FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
