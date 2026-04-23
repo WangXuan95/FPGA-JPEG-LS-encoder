@@ -1,3 +1,7 @@
 **/vivado
 **/quartus
 FPGA_jls_encoder_test
+SIM/**/*.jls
+SIM/**/*.decoded.pgm
+SIM/dec*.pgm
+SIM/ex_trace.txt

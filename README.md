@@ -103,25 +103,45 @@ During the input, **jls_encoder** will also output a compressed **JPEG-LS stream
 
 Simulation related files are in the [SIM](./SIM) directory, including:
 
-* [tb_jls_encoder.v](./SIM) is a testbench for jls_encoder. The behavior is: batch uncompressed images in .pgm format in the specified folder into jls_encoder for compression, and then save the output of jls_encoder to a .jls file.
-* [tb_jls_encoder_run_iverilog.bat](./SIM) is a command script for iverilog simulation.
-* The [images](./SIM) folder contains several image files in .pgm format. The .pgm format stores an uncompressed (that is, raw pixel) 8bit grayscale image, which can be opened with photoshop software or a Linux image viewer (Windows image viewer cannot view it).
+* [tb_jls_encoder.v](./SIM/tb_jls_encoder.v) — self-checking testbench for jls_encoder. Compresses all `.pgm` images and compares the output byte-for-byte against golden reference files. Reports `[PASS]` / `[FAIL]` per image and exits with a non-zero code on any mismatch.
+* [run_sim.py](./SIM/run_sim.py) — one-command Python runner that compiles, runs, and checks all tests automatically.
+* [golden/](./SIM/golden) — locally generated golden `.jls` reference files used by the self-check flow. These files are not intended to be tracked in git; generate them with `--regen-golden` when needed.
+* The [images](./SIM/images) folder contains several image files in `.pgm` format. The `.pgm` format stores an uncompressed 8-bit grayscale image.
 
-> The .pgm file format is very simple, with only a header to indicate the length and width of the image, followed by all the raw pixels of the image. So I choose .pgm file as the input file for the simulation, because it only needs to write some code in the testbench to parse the .pgm file, and take out the pixels and send it to jls_encoder . However, you can ignore the format of the pgm file, because the work of jls_encoder has nothing to do with the pgm format, it only needs to accept the raw pixels of the image as input. You only need to focus on the simulated waveform and how the image pixels are fed into the jls_encoder.
+> The `.pgm` file format is very simple: a short ASCII header with width/height, followed by all raw pixels. `jls_encoder` only needs raw pixels as input and has no dependency on the `.pgm` format itself.
 
-Before using iverilog for simulation, you need to install iverilog , see: [iverilog_usage](https://github.com/WangXuan95/WangXuan95/blob/main/iverilog_usage/iverilog_usage.md)
+Before using iverilog for simulation, install iverilog: [iverilog_usage](https://github.com/WangXuan95/WangXuan95/blob/main/iverilog_usage/iverilog_usage.md)
 
-Then double-click tb_jls_encoder_run_iverilog.bat to run the simulation, which takes more than 10 minutes to run.
+Then run all 22 self-checking tests with a single command:
 
-After the simulation is over, you can see that several .jls files are generated in the folder, which are compressed image files. In addition, the simulation also produces a waveform file dump.vcd, you can open dump.vcd with gtkwave to view the waveform.
+```bash
+python SIM/run_sim.py
+```
 
-In addition, you can also modify some simulation parameters:
+The runner compiles the testbench, runs each image through `jls_encoder`, and compares every output byte against the locally generated golden file. Example output:
 
-- Modify the macro **NEAR** in tb_jls_encoder.v to change the compression ratio.
-- Modify the macro **BUBBLE_CONTROL** in tb_jls_encoder.v to determine how many bubbles to insert between adjacent input pixels:
-  - When **BUBBLE_CONTROL=0**, no bubbles are inserted.
-  - When **BUBBLE_CONTROL>0**, insert **BUBBLE_CONTROL ** bubbles.
-  - When **BUBBLE_CONTROL<0**, insert random **0~(-BUBBLE_CONTROL)** bubbles each time.
+```
+[PASS] test001 (near=0)
+[PASS] test002 (near=0)
+...
+22/22 PASS
+```
+
+You can also use the following options:
+
+- `--near N [N ...]` — one or more NEAR values (default 0, range 0–7)
+- `--bubble N [N ...]` — one or more BUBBLE_CONTROL values (default -1 = random 0..1; 0 = no bubbles, max throughput; N>0 = constant N bubbles between pixels)
+- `--regen-golden` — regenerate golden reference files
+- `--no-check` — run without comparing to golden files
+
+Passing multiple values to `--near` and/or `--bubble` runs the full (near × bubble) regression matrix in a single invocation. Golden files depend only on NEAR (bubbles change timing, not encoded bytes), so one golden set per NEAR is generated once and reused across bubble values. Example:
+
+```bash
+# Full regression: 4 NEAR values × 4 bubble settings = 16 runs, one invocation
+python SIM/run_sim.py --near 0 1 3 7 --bubble 0 -1 1 3
+```
+
+The testbench emits a minimal `[alive] t=<time>` heartbeat every 2M clocks (override via `-D HEARTBEAT_CYCLES=...`) so long runs can be monitored without polluting simulation output.
 
 　
 
@@ -149,15 +169,54 @@ JPEGLSdec.exe test001.jls -otmp.pgm
 
 # FPGA Deployment
 
-On Xilinx Artix-7 xc7a35tcsg324-2, the synthesized and implemented results are as follows.
+Synthesized and implemented with Vivado 2025.2 on **Xilinx Artix-7 xc7a100tcsg324-1** (Arty A7-100T), targeting 62.5 MHz (16 ns period):
 
-|    LUT     |    FF    |              BRAM              | Max Clock freq. |
-| :--------: | :------: | :----------------------------: | :-------------: |
-| 2347 (11%) | 932 (2%) | 9 x RAMB18 (9%), total 144Kbit |     35 MHz      |
+| Logic LUTs  |  LUT-RAMs   |     FFs      |       BRAM        | Max Clock freq. |
+| :---------: | :---------: | :----------: | :---------------: | :-------------: |
+| 1910 (3.0%) | 288 (1.5%)  | 1010 (0.8%)  | 4 × RAMB36 (3.0%) |   ~63.8 MHz     |
 
-At 35MHz, the image compression performance is 35 Mpixel/s, which means the compression frame rate for 1920x1080 images is 16.8fps.
+At 63.8 MHz, compression throughput is **63.8 Mpixel/s**, supporting:
+- **1920×1080 @ 30 fps** (full HD)
+- **1280×720 @ 69 fps** (720p)
+
+The 16 KB linebuffer is mapped to 4 × RAMB36 by declaring `(* ram_style = "block" *)` on the array and registering the write-forward bypass separately so the RAM read port is a clean `c_d_ram <= linebuffer[a_ii]`. Without that split, Vivado's inference falls back to distributed RAM (~3300 LUTRAMs). See [RTL/jls_encoder.v:1055-1070](./RTL/jls_encoder.v#L1055-L1070).
+
+Synthesis scripts are in the [SYNTH](./SYNTH) directory:
+
+```bash
+vivado -mode batch -source SYNTH/run_synth.tcl
+```
+
+The pipeline was split into 12 stages (including a two-cycle stage e1→e2 to break the critical path through the context quantisation RAM), achieving a ~30% Fmax improvement over the original single-cycle stage e design (~49 MHz → ~63.8 MHz, measured post-route on `xc7a100tcsg324-1` at 16 ns constraint).
 
 　
+
+## Arty A7 demo dependency: fpgacapZero
+
+The hardware demo in [example/arty_a7](./example/arty_a7) depends on the
+[`fcapz/`](./fcapz) git submodule, which tracks
+[fpgacapZero](https://github.com/lcapossio/fpgacapZero), for both:
+
+- the JTAG-to-AXI bridge RTL used by the Vivado build
+- the Python host package `fcapz` used by
+  [`example/arty_a7/run_demo.py`](./example/arty_a7/run_demo.py)
+
+Current default setup:
+
+- RTL dependency path: `./fcapz`
+- optional override for build scripts: `FCAPZ_ROOT`
+- Python package install: `python -m pip install -e fcapz`
+
+Example setup:
+
+```powershell
+git submodule update --init --recursive
+python -m pip install -e fcapz
+python example/arty_a7/run_demo.py --build --image SIM/images/test008.pgm
+```
+
+`FCAPZ_ROOT` remains available if you want to point the build at a different
+checkout during development.
 
 # Reference
 
@@ -272,27 +331,32 @@ i_sof=1 和 i_e=1 之间；以及 i_e=1 各自之间可以插入任意个空闲�
 
 仿真相关文件都在 SIM 目录里，包括：
 
-* tb_jls_encoder.v 是针对 jls_encoder 的 testbench。行为是：将指定文件夹里的 .pgm 格式的未压缩图像批量送入 jls_encoder 进行压缩，然后将 jls_encoder 的输出结果保存到 .jls 文件里。
-* tb_jls_encoder_run_iverilog.bat 包含了执行 iverilog 仿真的命令。
-* images 文件夹包含几张 .pgm 格式的图像文件。 .pgm 格式存储的是未压缩（也就是存储原始像素）的 8bit 灰度图像，可以使用 photoshop 软件或 Linux 图像查看器就能打开它（Windows图像查看器查看不了它）。
+* [tb_jls_encoder.v](./SIM/tb_jls_encoder.v) — 自校验 testbench，对每张图像输出的每个字节与黄金参考文件逐一比较，输出 `[PASS]`/`[FAIL]`，任意失败时以非零状态退出。
+* [run_sim.py](./SIM/run_sim.py) — 一键 Python 运行脚本，自动完成编译、仿真、校验全流程。
+* [golden/](./SIM/golden) — 自校验流程使用的本地生成黄金 `.jls` 参考文件。这些文件不建议纳入 git，需要时用 `--regen-golden` 生成。
+* [images](./SIM/images) 文件夹包含几张 `.pgm` 格式的图像文件。
 
-> .pgm 文件格式非常简单，只有一个文件头来指示图像的长宽，然后紧接着就存放图像的所有原始像素。因此我选用 .pgm 文件作为仿真的输入文件，因为只需要在 testbench 中简单地编写一些代码就能解析 .pgm 文件，并把其中的像素取出发给 jls_encoder 。不过，你可以不关注 pgm 文件的格式，因为 jls_encoder 的工作与 pgm 格式并没有关系，它只需要接受图像的原始像素作为输入即可。你只需关注仿真的波形，关注图像像素是如何被送入 jls_encoder 中即可。
+安装 iverilog 后，一条命令即可运行全部 22 个自校验测试：
 
-使用 iverilog 进行仿真前，需要安装 iverilog ，见：[iverilog_usage](https://github.com/WangXuan95/WangXuan95/blob/main/iverilog_usage/iverilog_usage.md)
+```bash
+python SIM/run_sim.py
+```
 
-然后双击 tb_jls_encoder_run_iverilog.bat 就可以运行仿真，该仿真需要运行十几分钟。
+可选参数：
 
-仿真结束后，你可以看到文件夹中产生了几个 .jls 文件，它们就是压缩得到的图像文件。另外，仿真还产生了波形文件 dump.vcd ，你可以用 gtkwave 打开 dump.vcd 来查看波形。
+- `--near N [N ...]` — 一个或多个 NEAR 值（默认 0，范围 0–7）
+- `--bubble N [N ...]` — 一个或多个 BUBBLE_CONTROL 值（默认 -1 = 随机 0..1；0 = 无气泡最大吞吐；N>0 = 相邻像素间固定插入 N 个气泡）
+- `--regen-golden` — 重新生成黄金参考文件
+- `--no-check` — 仅运行，不与黄金文件比较
 
-另外，你还可以修改一些仿真参数来进行：
+同时给 `--near` 和 `--bubble` 传多个值时，一次调用即可运行完整的 (near × bubble) 回归矩阵。黄金文件只依赖 NEAR（气泡只影响时序，不影响编码字节），因此每个 NEAR 的黄金文件只需生成一次，并在不同气泡设置之间复用。例：
 
-- 修改 tb_jls_encoder.v 里的宏名 **NEAR** 来改变压缩率。
-- 修改 tb_jls_encoder.v 里的宏名 **BUBBLE_CONTROL** 来决定输入相邻的像素间插入多少个气泡：
-  - **BUBBLE_CONTROL=0** 时，不插入任何气泡。
-  - **BUBBLE_CONTROL>0** 时，插入 **BUBBLE_CONTROL **个气泡。
-  - **BUBBLE_CONTROL<0** 时，每次插入随机的 **0~(-BUBBLE_CONTROL)** 个气泡
+```bash
+# 完整回归：4 个 NEAR 值 × 4 种气泡设置 = 16 次运行，一条命令
+python SIM/run_sim.py --near 0 1 3 7 --bubble 0 -1 1 3
+```
 
-> 在不同 NEAR 值和 BUBBLE_CONTROL 值下，本库已经经过了几百张照片的结果对比验证，充分保证无bug。（这部分自动化验证代码就没放上来了）
+Testbench 每 2M 时钟发一条极简 `[alive] t=<time>` 心跳（可通过 `-D HEARTBEAT_CYCLES=...` 覆盖），以便长时间运行中确认仿真存活而不污染输出。
 
 ## 查看压缩结果
 
@@ -318,13 +382,25 @@ JPEGLSdec.exe test001.jls -otmp.pgm
 
 # FPGA 部署
 
-在 Xilinx Artix-7 xc7a35tcsg324-2 上，综合和实现的结果如下。
+使用 Vivado 2025.2 在 **Xilinx Artix-7 xc7a100tcsg324-1**（Arty A7-100T）上综合和实现，目标频率 62.5 MHz（16 ns 周期）：
 
-|    LUT     |    FF    |              BRAM              | 最高时钟频率 |
-| :--------: | :------: | :----------------------------: | :----------: |
-| 2347 (11%) | 932 (2%) | 9个RAMB18 (9%)，等效于 144Kbit |    35 MHz    |
+|  逻辑 LUT   |  LUT-RAM   |     FF       |       BRAM        | 最高时钟频率 |
+| :---------: | :--------: | :----------: | :---------------: | :----------: |
+| 1910 (3.0%) | 288 (1.5%) | 1010 (0.8%)  | 4 × RAMB36 (3.0%) |  ~63.8 MHz   |
 
-35MHz 下，图像压缩的性能为 35 Mpixel/s ，对 1920x1080 图像的压缩帧率是 16.8fps 。
+63.8 MHz 下，压缩吞吐量为 **63.8 Mpixel/s**：
+- **1920×1080 @ 30 fps**（全高清）
+- **1280×720 @ 69 fps**（720p）
+
+16 KB 线缓冲通过 `(* ram_style = "block" *)` 属性映射到 4 × RAMB36，并将 write-forward 旁路从 RAM 读端口上分离（使读端口仅为干净的 `c_d_ram <= linebuffer[a_ii]`）。否则 Vivado 会推断为分布式 RAM（约 3300 LUTRAM）。参见 [RTL/jls_encoder.v:1055-1070](./RTL/jls_encoder.v#L1055-L1070)。
+
+综合脚本位于 [SYNTH](./SYNTH) 目录：
+
+```bash
+vivado -mode batch -source SYNTH/run_synth.tcl
+```
+
+流水线拆分为 12 级（含 e1→e2 两周期级，用于打断经过上下文量化 RAM 的关键路径），相比原始单周期设计（~49 MHz）Fmax 提升约 30%（post-route 实测 `xc7a100tcsg324-1`、16 ns 约束下 ~63.8 MHz）。
 
 　
 
@@ -335,3 +411,4 @@ JPEGLSdec.exe test001.jls -otmp.pgm
 - CharLS, a C++ JPEG-LS library implementation : https://github.com/team-charls/charls
 - 精简的 JPEG-LS baseline 编码器 (C语言) : https://github.com/WangXuan95/ImCvt 
 - 另一个高性能的 FPGA-based JPEG-LS encoder : https://github.com/WangXuan95/UH-JLS
+ã€€

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Leonardo Capossio - bard0 design - hello@bard0.com
+
+name: sim
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        near: [0, 1, 2, 7]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Regression (NEAR=${{ matrix.near }}, bubble matrix)
+        working-directory: SIM
+        run: python3 run_sim.py --near ${{ matrix.near }} --bubble 0 -1 1 3

@@ -311,7 +311,7 @@ endfunction
 // context memorys
 //-------------------------------------------------------------------------------------------------------------------
 reg        [ 5:0] Nram [0:365];
-reg        [12:0] Aram [0:365];
+(* ram_style = "distributed" *) reg [12:0] Aram [0:365];
 reg signed [ 6:0] Bram [0:365];
 reg signed [ 7:0] Cram [1:364];
 
@@ -397,7 +397,7 @@ reg [ 7:0] c_x;
 reg [ 7:0] c_b;
 reg [ 7:0] c_bt;
 reg [ 7:0] c_c;
-reg [ 7:0] c_d;
+wire[ 7:0] c_d;  // see linebuffer section — muxed post-BRAM
 
 always @ (posedge clk) begin
     c_sof <= b_sof & rstn;
@@ -461,7 +461,84 @@ end
 
 
 //-------------------------------------------------------------------------------------------------------------------
-// pipeline stage e: get errval, Rx reconstruct loop, N, B, C update
+// pipeline stage e1: compute context q, run-mode detection, predictor
+//
+// Timing fix: splits the original single stage e into e1 + e2 to cut the critical path.
+// e1 pre-computes {s,q}, runi/rune flags and the raw predictor using registered d_* inputs.
+// e2 (below) receives these as registered inputs and does the arithmetic with a clean
+// registered address into Cram/Nram/Bram, removing func_get_q from the RAM-read path.
+//
+// Left-neighbor feedback ('a' = reconstructed previous pixel):
+//   Lossless (P_LOSSY=0): reconstructed pixel = original pixel = e1_x (registered, 0 ns path)
+//   Lossy    (P_LOSSY=1): computed combinatorially via e_x_comb (see end of this section)
+//-------------------------------------------------------------------------------------------------------------------
+
+// Forward declaration — assigned in the e_x_comb section below.
+wire [7:0] e_x_comb;
+
+wire [7:0] d_w_a = d_fc ? d_b : e_x_comb;
+
+reg         e1_sof;
+reg         e1_e;
+reg         e1_fc;
+reg         e1_lc;
+reg         e1_eof;
+reg  [13:0] e1_ii;
+reg  [ 7:0] e1_x;       // input pixel value (d_x passed through)
+reg  [ 7:0] e1_a;       // left neighbor value (d_w_a at e1 processing time)
+reg  [ 7:0] e1_b;       // above pixel
+reg  [ 7:0] e1_c;       // above-left pixel
+reg         e1_s;       // sign from func_get_q (regular mode)
+reg  [ 8:0] e1_q;       // context index from func_get_q (before rune override)
+reg         e1_runi;    // in run mode
+reg         e1_rune;    // run end (d_e gated)
+reg         e1_rt;      // run-end type: func_is_near(d_b, d_w_a)
+reg         e1_s_rune;  // run-end sign
+reg  [ 7:0] e1_pre_px;  // raw predictor: func_predictor(d_w_a, d_b, d_c)
+
+reg        s1;          // not real register
+reg  [8:0] q1;          // not real register
+reg        runi1;       // not real register
+reg        rune1;       // not real register
+
+always @ (posedge clk) begin
+    e1_sof <= d_sof & rstn;
+    if(~rstn | d_sof) begin
+        {e1_e, e1_fc, e1_lc, e1_eof, e1_ii, e1_x, e1_a, e1_b, e1_c,
+         e1_s, e1_q, e1_runi, e1_rune, e1_rt, e1_s_rune, e1_pre_px} <= 0;
+    end else begin
+        runi1 = 1'b0;
+        rune1 = 1'b0;
+        {s1, q1} = func_get_q(d_qp1, d_c, d_w_a);
+        runi1 = ~d_fc & e1_runi | (q1 == 9'd0);
+        if(runi1) begin
+            runi1 = func_is_near(d_x, d_w_a);
+            rune1 = ~runi1;
+        end
+        e1_e      <= d_e;
+        e1_fc     <= d_fc;
+        e1_lc     <= d_lc;
+        e1_eof    <= d_eof;
+        e1_ii     <= d_ii;
+        e1_x      <= d_x;
+        e1_a      <= d_w_a;
+        e1_b      <= d_b;
+        e1_c      <= d_c;
+        e1_s      <= s1;
+        e1_q      <= q1;
+        if(d_e) e1_runi <= runi1;
+        e1_rune   <= d_e & rune1;
+        e1_rt     <= func_is_near(d_b, d_w_a);
+        e1_s_rune <= ({1'b0,d_w_a} > ({1'b0,d_b} + {6'd0,NEAR})) ? 1'b1 : 1'b0;
+        e1_pre_px <= func_predictor(d_w_a, d_b, d_c);
+    end
+end
+
+
+//-------------------------------------------------------------------------------------------------------------------
+// pipeline stage e2: errval, Rx reconstruct, N/B/C update
+// Output register names kept identical to the original stage e so all downstream
+// stages (ef, f, g...) and the linebuffer write are unchanged.
 //-------------------------------------------------------------------------------------------------------------------
 reg              e_sof;
 reg              e_e;
@@ -482,13 +559,8 @@ reg        [5:0] e_Nn;
 reg signed [7:0] e_Cn;
 reg signed [6:0] e_Bn;
 
-wire       [7:0] d_w_a = d_fc ? d_b : e_x;
-
+reg        [8:0] qq;          // not real register (context after rune override)
 reg              s;           // not real register
-reg        [8:0] q;           // not real register
-reg              rt;          // not real register
-reg              runi;        // not real register
-reg              rune;        // not real register
 reg signed [7:0] Co;          // not real register
 reg        [6:0] No, Nn;      // not real register
 reg signed [6:0] Bo;          // not real register
@@ -496,47 +568,42 @@ reg signed [9:0] px;          // not real register
 reg signed [9:0] err;         // not real register
 
 always @ (posedge clk) begin
-    e_sof <= d_sof & rstn;
+    e_sof <= e1_sof & rstn;
     e_2BleN <= 1'b0;
     {e_write_C, e_Cn, e_write_en, e_Bn, e_Nn} <= 0;
-    if(~rstn | d_sof) begin
+    if(~rstn | e1_sof) begin
         {e_e, e_fc, e_lc, e_eof, e_ii, e_runi, e_rune, e_x, e_q, e_rt, e_err, e_No} <= 0;
     end else begin
-        rt = 1'b0;
-        rune = 1'b0;
-        No = 0;
+        No  = 0;
         err = 0;
-        {s, q} = func_get_q(d_qp1, d_c, d_w_a);
-        Co = (e_write_C & e_q==q) ? e_Cn : Cram[q];
-        runi = ~d_fc & e_runi | (q == 9'd0);
-        if(runi) begin
-            runi = func_is_near(d_x, d_w_a);
-            rune = ~runi;
-        end
-        if(d_e) begin
-            if(runi) begin
-                e_x <= P_LOSSY ? d_w_a : d_x;
+        // Effective context and sign — rune overrides q to 365/0 and uses its own sign.
+        // e1_q has a registered address: Cram/Nram/Bram reads start with stable address.
+        qq = e1_rune ? (e1_rt ? 9'd365 : 9'd0) : e1_q;
+        s  = e1_rune ? e1_s_rune : e1_s;
+        // Bypass: if previous e2 cycle wrote to e1_q, forward the written value.
+        // Both e_q (registered output) and e1_q (registered input) are stable at start of cycle.
+        Co = (e_write_C & e_q==e1_q) ? e_Cn : Cram[e1_q];
+        if(e1_e) begin
+            if(e1_runi) begin
+                e_x <= P_LOSSY ? e1_a : e1_x;
             end else begin
-                if(rune) begin
-                    rt = func_is_near(d_b, d_w_a);
-                    s = {1'b0,d_w_a} > ({1'b0,d_b} + {6'd0,NEAR}) ? 1'b1 : 1'b0;
-                    q = rt ? 9'd365 : 9'd0;
-                    px = rt ? d_w_a : d_b;
+                if(e1_rune) begin
+                    px = e1_rt ? $signed({2'b0,e1_a}) : $signed({2'b0,e1_b});
                 end else begin
                     px[9:8] = 2'b00;
-                    px[7:0] = func_clip( $signed({2'h0, func_predictor(d_w_a, d_b, d_c)}) + ( s ? -$signed({Co[7],Co[7],Co}) : $signed({Co[7],Co[7],Co}) ) );
+                    px[7:0] = func_clip( $signed({2'h0, e1_pre_px}) + ( s ? -$signed({Co[7],Co[7],Co}) : $signed({Co[7],Co[7],Co}) ) );
                 end
-                err = s ? px - $signed({2'd0, d_x}) : $signed({2'd0, d_x}) - px;
+                err = s ? px - $signed({2'd0, e1_x}) : $signed({2'd0, e1_x}) - px;
                 err = func_errval_quantize(err);
-                e_x <= P_LOSSY ? func_clip( px + ( s ? -(P_QUANT*err) : P_QUANT*err ) ) : d_x;
+                e_x <= P_LOSSY ? func_clip( px + ( s ? -(P_QUANT*err) : P_QUANT*err ) ) : e1_x;
                 err = func_modrange(err);
-                No = ((e_write_en & e_q==q) ? e_Nn : Nram[q]) + 7'd1;
+                No = ((e_write_en & e_q==qq) ? e_Nn : Nram[qq]) + 7'd1;
                 Nn = No;
                 if(No[6]) Nn = Nn >>> 1;
                 e_Nn <= Nn[5:0];
-                Bo = (e_write_en & e_q==q) ? e_Bn : Bram[q];
+                Bo = (e_write_en & e_q==qq) ? e_Bn : Bram[qq];
                 e_write_en <= 1'b1;
-                if(rune) begin
+                if(e1_rune) begin
                     e_Bn <= B_update(No[6], Bo, err<$signed(10'd0));
                     e_2BleN <= $signed({Bo,1'b0}) < $signed({1'b0,No});
                 end else begin
@@ -545,20 +612,66 @@ always @ (posedge clk) begin
                     e_2BleN <= $signed({Bo,1'b0}) <= -$signed({1'b0,No});
                 end
             end
-            e_runi <= runi;
         end
-        e_e <= d_e;
-        e_fc <= d_fc;
-        e_lc <= d_lc;
-        e_eof <= d_eof;
-        e_ii <= d_ii;
-        e_rune <= d_e & rune;
-        e_q <= q;
-        e_rt <= rt;
-        e_err <= err;
-        e_No <= No;
+        e_e    <= e1_e;
+        e_fc   <= e1_fc;
+        e_lc   <= e1_lc;
+        e_eof  <= e1_eof;
+        e_ii   <= e1_ii;
+        e_runi <= e1_runi;
+        e_rune <= e1_rune;
+        e_q    <= qq;
+        e_rt   <= e1_rune ? e1_rt : 1'b0;  // rt is only meaningful for rune (run-end) pixels
+        e_err  <= err;
+        e_No   <= No;
     end
 end
+
+
+//-------------------------------------------------------------------------------------------------------------------
+// e_x_comb: combinational reconstructed pixel forwarded from e2 to e1
+//
+// At clock T: e2 is processing pixel N-1 (inputs: e1_*).
+//             e1 is processing pixel N and needs pixel N-1's reconstructed value as 'a'.
+// Lossless: reconstructed pixel = original pixel = e1_x (registered). Zero-delay path.
+// Lossy:    computed combinatorially from e2's registered inputs, using the same
+//           arithmetic as e2 but without func_modrange / C_B_update (not needed for e_x).
+//-------------------------------------------------------------------------------------------------------------------
+reg signed [7:0] Co_fwd;      // not real register
+reg signed [9:0] px_fwd;      // not real register
+reg signed [9:0] err_fwd;     // not real register
+reg              s_fwd;       // not real register
+reg        [7:0] e_x_comb_r;  // not real register
+
+always @(*) begin
+    Co_fwd     = (e_write_C & e_q==e1_q) ? e_Cn : Cram[e1_q];
+    s_fwd      = e1_rune ? e1_s_rune : e1_s;
+    px_fwd     = 0;
+    err_fwd    = 0;
+    e_x_comb_r = e1_a;    // run mode default: reconstructed = left neighbor
+    if(!e1_runi) begin
+        if(e1_rune)
+            px_fwd = e1_rt ? $signed({2'b0,e1_a}) : $signed({2'b0,e1_b});
+        else begin
+            px_fwd[9:8] = 2'b00;
+            px_fwd[7:0] = func_clip( $signed({2'h0,e1_pre_px}) + ( s_fwd ? -$signed({Co_fwd[7],Co_fwd[7],Co_fwd}) : $signed({Co_fwd[7],Co_fwd[7],Co_fwd}) ) );
+        end
+        err_fwd    = s_fwd ? px_fwd - $signed({2'd0,e1_x}) : $signed({2'd0,e1_x}) - px_fwd;
+        err_fwd    = func_errval_quantize(err_fwd);
+        e_x_comb_r = func_clip( px_fwd + ( s_fwd ? -(P_QUANT*err_fwd) : P_QUANT*err_fwd ) );
+    end
+end
+
+// For lossless: e1_x is a registered value — no combinational path into e1.
+// For lossy:    e_x_comb_r provides the forward path (Cram read + clip + errval + clip).
+//
+// Bubble handling: e1_* update unconditionally, so during a bubble at e1 (e1_e=0)
+// the combinational e_x_comb_r evaluates against bubble-state e1_* and returns a
+// garbage value. If a valid pixel follows, its d_w_a samples that garbage. Hold
+// the last valid-cycle e_x_comb_r and forward it during bubble cycles instead.
+reg [7:0] e_x_comb_held;
+always @ (posedge clk) if(rstn & e1_e) e_x_comb_held <= e_x_comb_r;
+assign e_x_comb = P_LOSSY ? (e1_e ? e_x_comb_r : e_x_comb_held) : e1_x;
 
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -939,11 +1052,22 @@ end
 //-------------------------------------------------------------------------------------------------------------------
 // linebuffer for context pixels
 //-------------------------------------------------------------------------------------------------------------------
-reg [7:0] linebuffer [0:(1<<14)-1];
-always @ (posedge clk)  // line buffer read
-    c_d <= linebuffer[a_ii];
-always @ (posedge clk)  // line buffer write
-    if(e_e) linebuffer[e_ii] <= e_x;
+(* ram_style = "block" *) reg [7:0] linebuffer [0:(1<<14)-1];
+// Write-forward bypass: at the minimum supported width (W=5) the a→e pipeline
+// depth equals the row length, so the next row's linebuffer read collides with
+// the current row's write on the same clock edge. The read must forward e_x in
+// that case. To keep BRAM inference (no mux on the RAM output path), register
+// the RAM read, e_x, and the bypass condition separately, then mux them into
+// c_d combinationally — Vivado then maps the array to BRAM and the bypass mux
+// becomes plain LUT logic at the BRAM output port.
+reg [7:0] c_d_ram;
+reg [7:0] e_x_fwd;
+reg       fwd_en;
+always @ (posedge clk) c_d_ram <= linebuffer[a_ii];
+always @ (posedge clk) e_x_fwd <= e_x;
+always @ (posedge clk) fwd_en  <= e_e & (e_ii == a_ii);
+always @ (posedge clk) if(e_e) linebuffer[e_ii] <= e_x;
+assign c_d = fwd_en ? e_x_fwd : c_d_ram;
 
 
 //-------------------------------------------------------------------------------------------------------------------
